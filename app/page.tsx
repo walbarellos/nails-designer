@@ -3,10 +3,14 @@ import { useEffect, useState } from 'react'
 import CalendarMonthly from '@/components/CalendarMonthly'
 import HeroLogo from '@/components/HeroLogo'
 
+function sortHHMM(arr: string[]) {
+  return [...arr].sort((a,b)=> a.localeCompare(b))
+}
+
 const MARK_KEY   = 'nails.v1.markedDays'
 const LAST_KEY   = 'nails.v1.lastView'
 const PROTO_KEY  = 'nails.v1.protocols'
-const SLOTS_KEY  = 'nails.v1.slots'          // <<< NOVO: mapa dia -> array de horários 'HH:MM'
+const SLOTS_KEY  = 'nails.v1.slots'
 const VANIA_PHONE = '+556884257558'
 
 type LastView = { year: number; month: number }
@@ -21,6 +25,32 @@ function ptTime(hhmm:string){ const [h,m]=hhmm.split(':').map(Number); const d=n
 function digitsOnly(s:string){ return (s||'').replace(/\D+/g,'') }
 function toE164OrDigits(input:string){ const raw=(input||'').trim(); if(!raw) return ''; if(/^\+?[1-9]\d{7,14}$/.test(raw)) return raw.startsWith('+')?raw:('+'+raw); const d=digitsOnly(raw); if(d.length>=10&&d.length<=13) return '+55'+d.replace(/^0+/,''); return d }
 function isHourAllowed(date:Date, hhmm:string){ const [h,m]=hhmm.split(':').map(Number); const w=date.getDay(); const hm=h*60+m; if(w>=1&&w<=5) return hm>=18*60; if(w===6) return hm>=13*60; return hm>=8*60&&hm<=20*60 }
+
+function minutesToHHMM(mins: number) {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+
+// Gera slots de 60 em 60 min no intervalo [startMin, endMin]
+function rangeSlots(startMin: number, endMin: number, step = 60) {
+  const out: string[] = []
+  for (let t = startMin; t <= endMin; t += step) out.push(minutesToHHMM(t))
+    return out
+}
+
+// Regra de funcionamento: Seg–Sex ≥18:00, Sáb ≥13:00, Dom 08:00–20:00
+function generateAllowedSlots(date: Date): string[] {
+  const w = date.getDay() // 0=Dom, 6=Sáb
+  if (w >= 1 && w <= 5) {                     // Seg–Sex
+    return rangeSlots(18*60, 23*60)           // 18:00 -> 23:00 (ajuste se quiser menor)
+  }
+  if (w === 6) {                              // Sáb
+    return rangeSlots(13*60, 20*60)           // 13:00 -> 20:00
+  }
+  return rangeSlots(8*60, 20*60)              // Dom
+}
+
 
 // ---------- protocolo ----------
 type ProtoMap = Record<string,string>
@@ -45,19 +75,19 @@ export default function Page(){
   const [markedDays, setMarkedDays] = useState<Set<string>>(new Set())
   const [selectedDay,setSelectedDay]=useState<Date|null>(null)
   const [open,setOpen]=useState(false)
-
   const [slots, setSlots] = useState<SlotsMap>({})
+  const allowedSlots = selectedDay ? generateAllowedSlots(selectedDay) : []
 
   // carrega last view / markedDays / slots depois do mount
-    useEffect(() => {
-       const last = loadLastView()
-        if (last) { setYear(last.year); setMonth(last.month) }
-        setMarkedDays(loadMarked())
-        setSlots(loadSlots())
-      }, [])
+  useEffect(() => {
+    const last = loadLastView()
+    if (last) { setYear(last.year); setMonth(last.month) }
+    setMarkedDays(loadMarked())
+    setSlots(loadSlots())
+  }, [])
 
-    // persiste last view sempre que mudar
-    useEffect(() => { saveLastView({ year, month }) }, [year, month])
+  // persiste last view sempre que mudar
+  useEffect(() => { saveLastView({ year, month }) }, [year, month])
 
   function onNextMonth(){ const d=new Date(year,month+1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
   function onSelectDay(d:Date|null){ if(!d) return; if(startOfDay(d)<startOfToday()) return; setSelectedDay(d); setOpen(true) }
@@ -68,14 +98,16 @@ export default function Page(){
     setSlots(prev=>{
       const next:{[k:string]:string[]} = { ...prev }
       const arr = new Set([...(next[day]||[]), hhmm])
-      next[day] = Array.from(arr).sort()
+      next[day] = sortHHMM(Array.from(arr))
       saveSlots(next)
       return next
     })
   }
 
-  // mapa dia -> contagem (para o calendário)
+  // contagem por dia para o calendário
   const slotsByDay = Object.fromEntries(Object.entries(slots).map(([d,arr])=>[d, arr.length]))
+  const selectedKey = selectedDay ? yyyymmdd(selectedDay) : null
+  const selectedSlots = selectedKey ? sortHHMM(slots[selectedKey] || []) : []
 
   return (
     <main className="container-max py-6 space-y-6">
@@ -87,7 +119,6 @@ export default function Page(){
     <p className="text-sm text-white/60">Selecionar dia futuro, escolher horário e enviar confirmação.</p>
     </div>
     <div className="ml-auto flex items-center gap-2">
-    {/* Removido: Mês anterior */}
     <button className="btn" onClick={onNextMonth}>Próximo mês</button>
     </div>
     </div>
@@ -101,13 +132,43 @@ export default function Page(){
     onSelectDay={onSelectDay}
     markedDays={markedDays}
     minDate={startOfToday()}
-    slotsByDay={slotsByDay}    // <<< NOVO
+    slotsByDay={slotsByDay}
     />
+    </section>
+
+    {/* Painel de detalhes do dia selecionado (A11y) */}
+    <section className="card p-4 sm:p-5" aria-live="polite" aria-atomic="true">
+    {!selectedDay ? (
+      <p className="text-sm text-white/60">Selecione um dia para ver os horários reservados.</p>
+    ) : (
+      <>
+      <h3 className="text-base font-semibold mb-2">
+      {ptDate(selectedDay)} — {selectedSlots.length || 0} horário(s) reservado(s)
+      </h3>
+      {selectedSlots.length === 0 ? (
+        <p className="text-sm text-white/60">Nenhum horário reservado ainda.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+        {selectedSlots.map(h => (
+          <li
+          key={h}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm"
+          aria-label={`Horário reservado ${ptTime(h)}`}
+          >
+          {h}
+          </li>
+        ))}
+        </ul>
+      )}
+      </>
+    )}
     </section>
 
     <QuickDialog
     open={open}
     date={selectedDay}
+    taken={selectedSlots}
+    allowed={allowedSlots}
     onClose={(sent, hhmm)=>{
       setOpen(false);
       if(sent && selectedDay && hhmm){
@@ -122,12 +183,16 @@ export default function Page(){
 
 // ---------- diálogo ----------
 function QuickDialog({
-  open, onClose, date
+  open, onClose, date, taken, allowed
 }:{
-  open:boolean; onClose:(sent:boolean, hhmm?:string)=>void; date:Date|null
+  open:boolean
+  onClose:(sent:boolean, hhmm?:string)=>void
+  date:Date|null
+  taken:string[]
+  allowed:string[]
 }){
   const [clientPhone,setClientPhone]=useState('')
-  const [time,setTime]=useState('')
+  const [time,setTime]=useState('')          // mantém estado do slot escolhido
   const [proto,setProto]=useState<string>('')
 
   useEffect(()=>{ if(open){ setClientPhone(''); setTime(''); setProto('') } },[open])
@@ -136,21 +201,27 @@ function QuickDialog({
     const dayStr=yyyymmdd(date); const dLabel=ptDate(date)
     const updatePhone=(v:string)=>{ setClientPhone(v); const d=digitsOnly(v); setProto(d.length>=8?getOrCreateProtocol(dayStr,v):'') }
 
+    const pickSlot = (hhmm:string)=>{
+      if (taken.includes(hhmm)) return
+        setTime(hhmm)
+    }
+
     const send=async()=>{
       if(!clientPhone.trim()) return alert('Informe o WhatsApp da cliente.')
         if(!time) return alert('Escolha o horário.')
-          if(!isHourAllowed(date,time)) return alert('Horário fora do atendimento: Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.')
+          if(taken.includes(time)) return alert('Este horário já está reservado. Escolha outro.')
+            if(!isHourAllowed(date,time)) return alert('Horário fora do atendimento: Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.')
 
-            const protocol = proto || getOrCreateProtocol(dayStr, clientPhone)
-            const msg =
-            `Agendamento confirmado para ${dLabel} às ${ptTime(time)}.%0A` +
-            `Cliente: ${clientPhone}.%0A` +
-            `PROTOCOLO: ${protocol}.%0A` +
-            `Se precisar ajustar, combine com a cliente. 💅`
-            const e164 = toE164OrDigits(VANIA_PHONE)
-            window.open(`https://wa.me/${encodeURIComponent(e164.replace('+',''))}?text=${msg}`,'_blank')
-            try{ await navigator.clipboard.writeText(protocol) }catch{}
-            onClose(true, time)                 // <<< devolve o horário escolhido
+              const protocol = proto || getOrCreateProtocol(dayStr, clientPhone)
+              const msg =
+              `Agendamento confirmado para ${dLabel} às ${ptTime(time)}.%0A` +
+              `Cliente: ${clientPhone}.%0A` +
+              `PROTOCOLO: ${protocol}.%0A` +
+              `Se precisar ajustar, combine com a cliente. 💅`
+              const e164 = toE164OrDigits(VANIA_PHONE)
+              window.open(`https://wa.me/${encodeURIComponent(e164.replace('+',''))}?text=${msg}`,'_blank')
+              try{ await navigator.clipboard.writeText(protocol) }catch{}
+              onClose(true, time)
     }
 
     return (
@@ -164,14 +235,67 @@ function QuickDialog({
       <p className="text-sm text-white/80 mb-3">Dia selecionado: <strong>{dLabel}</strong></p>
 
       <label className="label" htmlFor="cli">WhatsApp da cliente</label>
-      <input id="cli" className="input mb-3 text-base" inputMode="tel"
-      placeholder="(DD) 9XXXX-XXXX ou +55..." value={clientPhone}
-      onChange={e=>updatePhone(e.target.value)} autoFocus />
+      <input
+      id="cli"
+      className="input mb-3 text-base"
+      inputMode="tel"
+      placeholder="(DD) 9XXXX-XXXX ou +55..."
+      value={clientPhone}
+      onChange={e=>updatePhone(e.target.value)}
+      autoFocus
+      />
 
-      <label className="label" htmlFor="hhmm">Horário</label>
-      <input id="hhmm" type="time" className="input mb-2 text-base"
-      value={time} onChange={e=>setTime(e.target.value)} />
-      <p className="text-xs text-white/60 mb-3">Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.</p>
+      {/* Grade de horários (1h em 1h) */}
+      <div className="mb-2 flex items-center justify-between">
+      <label className="label">Horário</label>
+      <span className="text-xs text-white/60">toque para selecionar</span>
+      </div>
+      <div
+      className="
+      grid grid-cols-3 gap-2
+      sm:grid-cols-4
+      max-h-56 overflow-auto pr-1
+      "
+      role="listbox"
+      aria-label="Horários disponíveis"
+      >
+      {allowed.map(hhmm=>{
+        const isTaken = taken.includes(hhmm)
+        const isSelected = time === hhmm
+        return (
+          <button
+          key={hhmm}
+          type="button"
+          role="option"
+          aria-selected={isSelected}
+          aria-disabled={isTaken}
+          disabled={isTaken}
+          onClick={()=>pickSlot(hhmm)}
+          className={[
+            "rounded-lg px-2 py-2 text-sm border transition",
+            isTaken
+            ? "border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
+            : (isSelected
+            ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
+            : "border-white/10 bg-white/5 hover:bg-white/10"),
+          ].join(' ')}
+          title={isTaken ? "Já reservado" : "Disponível"}
+          >
+          {hhmm}
+          </button>
+        )
+      })}
+      </div>
+
+      {/* Info de conflito (se alguém selecionar manualmente ou vier de estado) */}
+      {time && taken.includes(time) && (
+        <p className="text-sm text-rose-400 mb-2" role="alert">
+        Este horário já está reservado.
+        </p>
+      )}
+      <p className="text-xs text-white/60 mb-3">
+      Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.
+      </p>
 
       {proto && (
         <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-2">

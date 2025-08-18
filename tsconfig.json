@@ -14,22 +14,15 @@
     "jsx": "preserve",
     "baseUrl": ".",
     "paths": { "@/*": ["./*"] },
-    "types": [
-      "next/types/global",
-      "react",
-      "react-dom",
-      "vitest",
-      "node"
-    ],
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "forceConsistentCasingInFileNames": true
   },
   "include": [
     "next-env.d.ts",
-    ".next/types/**/*.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

@@ -46,10 +46,7 @@ export default function CalendarMonthly({
     );
 
     const minDayStart = minDate ? startOfDay(minDate) : null;
-    const monthLabel = first.toLocaleDateString('pt-BR', {
-        month: "long",
-        year: "numeric",
-    });
+    const monthLabel = first.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 
     return (
         <section className={"w-full " + (className || "")} aria-label={`Calendário de ${monthLabel}`}>
@@ -273,24 +270,33 @@ function renderBadges(meta: DayMeta): React.ReactElement[] {
     return parts;
 }
 
-function buildAria(meta: DayMeta, isToday: boolean, isDisabled: boolean, takenCount: number) {
+function buildAria(
+    meta: DayMeta,
+    isToday: boolean,
+    isDisabled: boolean,
+    takenCount: number
+) {
     const dateLabel = meta.date.toLocaleDateString('pt-BR', {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-    });
-    const pieces: string[] = [dateLabel];
-    if (isToday) pieces.push("(hoje)");
-    if (isDisabled) pieces.push("(indisponível)");
-    if (takenCount > 0) pieces.push(`${takenCount} horário(s) reservado(s)`);
-    if (meta.total === 0) pieces.push("sem agendamentos");
-    else {
-        pieces.push(`${meta.total} agendamento(s)`);
-        if (meta.scheduled) pieces.push(`${meta.scheduled} agendado(s)`);
-        if (meta.confirmed) pieces.push(`${meta.confirmed} confirmado(s)`);
-        if (meta.done) pieces.push(`${meta.done} concluído(s)`);
-        if (meta.canceled) pieces.push(`${meta.canceled} cancelado(s)`);
-        if (meta.isPast && !meta.isFutureOrToday) pieces.push("(histórico)");
-    }
-    return pieces.join(", ");
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+    })
+
+    const pieces: string[] = [dateLabel]
+    if (isToday) pieces.push('(hoje)')
+        if (isDisabled) pieces.push('(indisponível)')
+            if (takenCount > 0) pieces.push(`${takenCount} horário(s) reservado(s)`)
+
+                if (meta.total === 0) {
+                    pieces.push('sem agendamentos')
+                } else {
+                    pieces.push(`${meta.total} agendamento(s)`)
+                    if (meta.scheduled) pieces.push(`${meta.scheduled} agendado(s)`)
+                        if (meta.confirmed) pieces.push(`${meta.confirmed} confirmado(s)`)
+                            if (meta.done) pieces.push(`${meta.done} concluído(s)`)
+                                if (meta.canceled) pieces.push(`${meta.canceled} cancelado(s)`)
+                                    if (meta.isPast && !meta.isFutureOrToday) pieces.push('(histórico)')
+                }
+
+                return pieces.join(', ')
 }
