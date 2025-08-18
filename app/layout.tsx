@@ -81,9 +81,33 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             "min-h-screen",
             "selection:bg-white/10 selection:text-white",
             "scroll-smooth",
+            // layout em coluna para colar o footer ao fim do app
+            "flex flex-col",
         ].join(" ")}
         >
+        <main className="flex-1">
         {children}
+        </main>
+
+        {/* Footer discreto com crédito (sem competir com a marca do app) */}
+        <footer
+        className="px-4 py-3 text-center text-xs text-zinc-500/90"
+        aria-label="Créditos do sistema"
+        >
+        <span className="sr-only">Créditos:</span>
+        <span className="opacity-90">
+        Feito por{" "}
+        <a
+        href="https://github.com/walbarellos"
+        target="_blank"
+        rel="noopener"
+        className="underline decoration-zinc-600/40 underline-offset-2 hover:decoration-zinc-400/60 focus:decoration-zinc-400/60"
+        >
+        walbarellos
+        </a>
+        </span>
+        </footer>
+
         <Script id="pwa-sw" strategy="afterInteractive">
         {`if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(() => {});
