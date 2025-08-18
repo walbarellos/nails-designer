@@ -46,7 +46,7 @@ export default function CalendarMonthly({
     );
 
     const minDayStart = minDate ? startOfDay(minDate) : null;
-    const monthLabel = first.toLocaleDateString(undefined, {
+    const monthLabel = first.toLocaleDateString('pt-BR', {
         month: "long",
         year: "numeric",
     });
@@ -274,7 +274,7 @@ function renderBadges(meta: DayMeta): React.ReactElement[] {
 }
 
 function buildAria(meta: DayMeta, isToday: boolean, isDisabled: boolean, takenCount: number) {
-    const dateLabel = meta.date.toLocaleDateString(undefined, {
+    const dateLabel = meta.date.toLocaleDateString('pt-BR', {
         day: "2-digit",
         month: "long",
         year: "numeric",

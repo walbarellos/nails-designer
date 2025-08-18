@@ -39,17 +39,25 @@ function saveSlots(m:SlotsMap){ try{ localStorage.setItem(SLOTS_KEY, JSON.string
 
 // ---------- página ----------
 export default function Page(){
-  const now=new Date()
-  const remembered=loadLastView()
-  const [year,setYear]=useState(remembered?.year??now.getFullYear())
-  const [month,setMonth]=useState(remembered?.month??now.getMonth())
-  const [markedDays,setMarkedDays]=useState<Set<string>>(()=>loadMarked())
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth())
+  const [markedDays, setMarkedDays] = useState<Set<string>>(new Set())
   const [selectedDay,setSelectedDay]=useState<Date|null>(null)
   const [open,setOpen]=useState(false)
 
-  const [slots,setSlots]=useState<SlotsMap>(()=>loadSlots()) // <<< NOVO
+  const [slots, setSlots] = useState<SlotsMap>({})
 
-  useEffect(()=>{ saveLastView({year,month}) },[year,month])
+  // carrega last view / markedDays / slots depois do mount
+    useEffect(() => {
+       const last = loadLastView()
+        if (last) { setYear(last.year); setMonth(last.month) }
+        setMarkedDays(loadMarked())
+        setSlots(loadSlots())
+      }, [])
+
+    // persiste last view sempre que mudar
+    useEffect(() => { saveLastView({ year, month }) }, [year, month])
 
   function onNextMonth(){ const d=new Date(year,month+1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
   function onSelectDay(d:Date|null){ if(!d) return; if(startOfDay(d)<startOfToday()) return; setSelectedDay(d); setOpen(true) }
