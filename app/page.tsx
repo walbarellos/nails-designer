@@ -9,22 +9,19 @@ function sortHHMM(arr: string[]) {
 
 const MARK_KEY   = 'nails.v1.markedDays'
 const LAST_KEY   = 'nails.v1.lastView'
-const PROTO_KEY  = 'nails.v1.protocols'
 const SLOTS_KEY  = 'nails.v1.slots'
-const VANIA_PHONE = '+556884257558'
+const VANIA_PHONE = '+556884257558' // manter com +; convertemos para dígitos no link
 
 type LastView = { year: number; month: number }
-type SlotsMap = Record<string, string[]> // { '2025-08-17': ['18:00','19:30'] }
+type SlotsMap = Record<string, string[]> // { '2025-08-17': ['18:30','19:30'] }
 
 // ---------- utils ----------
 function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d }
 function startOfDay(d:Date){ const x=new Date(d); x.setHours(0,0,0,0); return x }
 function yyyymmdd(d:Date){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}` }
 function ptDate(d:Date){ return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}) }
-function ptTime(hhmm:string){ const [h,m]=hhmm.split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) }
+function ptTime(hhmm:string){ const [h,m]=hhmm.split(':').map(Number); const dt=new Date(); dt.setHours(h,m,0,0); return dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) }
 function digitsOnly(s:string){ return (s||'').replace(/\D+/g,'') }
-function toE164OrDigits(input:string){ const raw=(input||'').trim(); if(!raw) return ''; if(/^\+?[1-9]\d{7,14}$/.test(raw)) return raw.startsWith('+')?raw:('+'+raw); const d=digitsOnly(raw); if(d.length>=10&&d.length<=13) return '+55'+d.replace(/^0+/,''); return d }
-function isHourAllowed(date:Date, hhmm:string){ const [h,m]=hhmm.split(':').map(Number); const w=date.getDay(); const hm=h*60+m; if(w>=1&&w<=5) return hm>=18*60; if(w===6) return hm>=13*60; return hm>=8*60&&hm<=20*60 }
 
 function minutesToHHMM(mins: number) {
   const h = Math.floor(mins / 60)
@@ -39,25 +36,25 @@ function rangeSlots(startMin: number, endMin: number, step = 60) {
     return out
 }
 
-// Regra de funcionamento: Seg–Sex ≥18:00, Sáb ≥13:00, Dom 08:00–20:00
-function generateAllowedSlots(date: Date): string[] {
+function isWeekend(date: Date) {
   const w = date.getDay() // 0=Dom, 6=Sáb
-  if (w >= 1 && w <= 5) {                     // Seg–Sex
-    return rangeSlots(18*60, 23*60)           // 18:00 -> 23:00 (ajuste se quiser menor)
-  }
-  if (w === 6) {                              // Sáb
-    return rangeSlots(13*60, 20*60)           // 13:00 -> 20:00
-  }
-  return rangeSlots(8*60, 20*60)              // Dom
+  return w === 0 || w === 6
+}
+function isWeekday(date: Date) {
+  const w = date.getDay()
+  return w >= 1 && w <= 5
 }
 
-
-// ---------- protocolo ----------
-type ProtoMap = Record<string,string>
-function loadProtoMap():ProtoMap{ try{ return JSON.parse(localStorage.getItem(PROTO_KEY)||'{}') }catch{ return {} } }
-function saveProtoMap(m:ProtoMap){ try{ localStorage.setItem(PROTO_KEY, JSON.stringify(m)) }catch{} }
-function computeProtocol(day:string, phone:string){ const d=day.replaceAll('-','').slice(2); const last4=digitsOnly(phone).slice(-4)||'0000'; const seed=(day+'|'+phone).split('').reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0,7); const A=String.fromCharCode(65+(seed%26)); const B=String.fromCharCode(65+((seed>>5)%26)); return `${d}-${last4}-${A}${B}` }
-function getOrCreateProtocol(day:string, phone:string){ const key=`${day}|${digitsOnly(phone)}`; const map=loadProtoMap(); if(map[key]) return map[key]; const p=computeProtocol(day,phone); map[key]=p; saveProtoMap(map); return p }
+/**
+ * Regras de funcionamento:
+ * - Seg–Sex: apenas 18:30 (e no máximo 1 atendimento no dia)
+ * - Sáb–Dom: agenda aberta (aqui configurada para 08:00–20:00, passo 60min)
+ */
+function generateAllowedSlots(date: Date): string[] {
+  if (isWeekday(date)) return ['18:30']
+    // fds (ajuste facilmente este range se desejar outro)
+    return rangeSlots(8*60, 20*60)
+}
 
 // ---------- persistência ----------
 function loadMarked():Set<string>{ try{ const raw=localStorage.getItem(MARK_KEY); return raw? new Set(JSON.parse(raw)): new Set() }catch{ return new Set() } }
@@ -90,9 +87,19 @@ export default function Page(){
   useEffect(() => { saveLastView({ year, month }) }, [year, month])
 
   function onNextMonth(){ const d=new Date(year,month+1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
-  function onSelectDay(d:Date|null){ if(!d) return; if(startOfDay(d)<startOfToday()) return; setSelectedDay(d); setOpen(true) }
+  function onSelectDay(d:Date|null){
+    if(!d) return
+      if(startOfDay(d)<startOfToday()) return
+        setSelectedDay(d)
+        setOpen(true)
+  }
 
-  function markDay(date:Date){ const key=yyyymmdd(date); setMarkedDays(prev=>{ const next=new Set(prev); next.add(key); saveMarked(next); return next }) }
+  function markDay(date:Date){
+    const key=yyyymmdd(date)
+    setMarkedDays(prev=>{
+      const next=new Set(prev); next.add(key); saveMarked(next); return next
+    })
+  }
   function addSlot(date:Date, hhmm:string){
     const day=yyyymmdd(date)
     setSlots(prev=>{
@@ -116,7 +123,7 @@ export default function Page(){
     <HeroLogo />
     <div className="min-w-0">
     <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Agenda — Vânia Maria</h1>
-    <p className="text-sm text-white/60">Selecionar dia futuro, escolher horário e enviar confirmação.</p>
+    <p className="text-sm text-white/60">Selecione um dia futuro, escolha o horário e confirme pelo WhatsApp.</p>
     </div>
     <div className="ml-auto flex items-center gap-2">
     <button className="btn" onClick={onNextMonth}>Próximo mês</button>
@@ -139,7 +146,7 @@ export default function Page(){
     {/* Painel de detalhes do dia selecionado (A11y) */}
     <section className="card p-4 sm:p-5" aria-live="polite" aria-atomic="true">
     {!selectedDay ? (
-      <p className="text-sm text-white/60">Selecione um dia para ver os horários reservados.</p>
+      <p className="text-sm text-white/60">Selecione um dia para ver os horários já reservados.</p>
     ) : (
       <>
       <h3 className="text-base font-semibold mb-2">
@@ -191,15 +198,14 @@ function QuickDialog({
   taken:string[]
   allowed:string[]
 }){
-  const [clientPhone,setClientPhone]=useState('')
+  const [clientName,setClientName]=useState('')
+  const [service,setService]=useState('Manicure')
   const [time,setTime]=useState('')          // mantém estado do slot escolhido
-  const [proto,setProto]=useState<string>('')
 
-  useEffect(()=>{ if(open){ setClientPhone(''); setTime(''); setProto('') } },[open])
+  useEffect(()=>{ if(open){ setClientName(''); setService('Manicure'); setTime('') } },[open])
   if(!open||!date) return null
 
-    const dayStr=yyyymmdd(date); const dLabel=ptDate(date)
-    const updatePhone=(v:string)=>{ setClientPhone(v); const d=digitsOnly(v); setProto(d.length>=8?getOrCreateProtocol(dayStr,v):'') }
+    const dLabel=ptDate(date)
 
     const pickSlot = (hhmm:string)=>{
       if (taken.includes(hhmm)) return
@@ -207,49 +213,87 @@ function QuickDialog({
     }
 
     const send=async()=>{
-      if(!clientPhone.trim()) return alert('Informe o WhatsApp da cliente.')
-        if(!time) return alert('Escolha o horário.')
-          if(taken.includes(time)) return alert('Este horário já está reservado. Escolha outro.')
-            if(!isHourAllowed(date,time)) return alert('Horário fora do atendimento: Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.')
+      // Regras: nome, serviço e horário obrigatórios
+      if(!clientName.trim()) return alert('Informe o seu nome.')
+        if(!service.trim()) return alert('Selecione o serviço.')
+          if(!time) return alert('Escolha o horário.')
 
-              const protocol = proto || getOrCreateProtocol(dayStr, clientPhone)
+            // Dias úteis: apenas 18:30 e no máximo 1 atendimento no dia
+            if (isWeekday(date)) {
+              if (time !== '18:30') return alert('Em dias úteis, o único horário disponível é 18:30.')
+                if (taken.length >= 1) return alert('Este dia útil já possui o único atendimento de 18:30 reservado.')
+            }
+
+            // Qualquer slot específico não pode estar ocupado
+            if (taken.includes(time)) return alert('Este horário já está reservado. Escolha outro.')
+
+              // Mensagem para WhatsApp
               const msg =
-              `Agendamento confirmado para ${dLabel} às ${ptTime(time)}.%0A` +
-              `Cliente: ${clientPhone}.%0A` +
-              `PROTOCOLO: ${protocol}.%0A` +
-              `Se precisar ajustar, combine com a cliente. 💅`
-              const e164 = toE164OrDigits(VANIA_PHONE)
-              window.open(`https://wa.me/${encodeURIComponent(e164.replace('+',''))}?text=${msg}`,'_blank')
-              try{ await navigator.clipboard.writeText(protocol) }catch{}
+              `Olá, Vânia! Gostaria de agendar *${service}* em *${dLabel}* às *${ptTime(time)}*.\n` +
+              `Meu nome é *${clientName}*.`
+
+              const e164Digits = digitsOnly(VANIA_PHONE) // remove o '+'
+              const url = `https://wa.me/${e164Digits}?text=${encodeURIComponent(msg)}`
+              window.open(url,'_blank','noopener,noreferrer')
+
               onClose(true, time)
     }
 
+    const weekdayFull = isWeekday(date) && taken.length >= 1
+
+    // <div role="dialog"> no lugar de <dialog>
     return (
-      <dialog open className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-      <div className="card w-full max-w-md p-4 sm:p-5">
+      <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="qd-title"
+      >
+      <div className="card w-full max-w-md p-4 sm:p-5" role="document">
       <header className="mb-3 flex items-center justify-between">
-      <h3 className="text-lg font-semibold">Confirmar e enviar</h3>
+      <h3 id="qd-title" className="text-lg font-semibold">Confirmar e enviar</h3>
       <button className="btn" onClick={()=>onClose(false)} aria-label="Fechar">Fechar</button>
       </header>
 
       <p className="text-sm text-white/80 mb-3">Dia selecionado: <strong>{dLabel}</strong></p>
 
-      <label className="label" htmlFor="cli">WhatsApp da cliente</label>
+      {/* Nome e Serviço (sem celular) */}
+      <label className="label" htmlFor="nome">Seu nome</label>
       <input
-      id="cli"
+      id="nome"
       className="input mb-3 text-base"
-      inputMode="tel"
-      placeholder="(DD) 9XXXX-XXXX ou +55..."
-      value={clientPhone}
-      onChange={e=>updatePhone(e.target.value)}
+      placeholder="Ex.: Ana"
+      value={clientName}
+      onChange={e=>setClientName(e.target.value)}
       autoFocus
       />
+
+      <label className="label" htmlFor="serv">Serviço</label>
+      <select
+      id="serv"
+      className="input mb-3 text-base"
+      value={service}
+      onChange={e=>setService(e.target.value)}
+      >
+      <option>Manicure</option>
+      <option>Pedicure</option>
+      <option>Esmaltação em Gel</option>
+      <option>Alongamento</option>
+      <option>Combo Mãos + Pés</option>
+      </select>
 
       {/* Grade de horários (1h em 1h) */}
       <div className="mb-2 flex items-center justify-between">
       <label className="label">Horário</label>
       <span className="text-xs text-white/60">toque para selecionar</span>
       </div>
+
+      {weekdayFull && (
+        <div className="mb-3 rounded-lg border border-white/10 bg-white/5 p-2 text-sm text-rose-300" role="alert">
+        Este dia útil já está indisponível (o único horário 18:30 foi reservado).
+        </div>
+      )}
+
       <div
       className="
       grid grid-cols-3 gap-2
@@ -260,7 +304,7 @@ function QuickDialog({
       aria-label="Horários disponíveis"
       >
       {allowed.map(hhmm=>{
-        const isTaken = taken.includes(hhmm)
+        const isTaken = taken.includes(hhmm) || (weekdayFull && hhmm === '18:30')
         const isSelected = time === hhmm
         return (
           <button
@@ -287,32 +331,14 @@ function QuickDialog({
       })}
       </div>
 
-      {/* Info de conflito (se alguém selecionar manualmente ou vier de estado) */}
-      {time && taken.includes(time) && (
-        <p className="text-sm text-rose-400 mb-2" role="alert">
-        Este horário já está reservado.
-        </p>
-      )}
-      <p className="text-xs text-white/60 mb-3">
-      Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.
+      <p className="text-xs text-white/60 mt-2 mb-4">
+      Dias úteis: apenas 18:30 (1 atendimento/dia). Fins de semana: 08:00–20:00.
       </p>
 
-      {proto && (
-        <div className="mb-3 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-2">
-        <div className="text-sm">
-        <div className="text-white/60">Protocolo</div>
-        <div className="font-semibold tracking-wider">{proto}</div>
-        </div>
-        <button className="btn" onClick={async()=>{ try{ await navigator.clipboard.writeText(proto) }catch{} }}>
-        Copiar
-        </button>
-        </div>
-      )}
-
-      <button className="btn btn-primary w-full py-3 text-base" onClick={send}>
-      Enviar para Vânia
+      <button className="btn btn-primary w-full py-3 text-base" onClick={send} disabled={weekdayFull}>
+      Enviar para Vânia pelo WhatsApp
       </button>
       </div>
-      </dialog>
+      </div>
     )
 }
