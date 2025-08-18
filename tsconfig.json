@@ -22,7 +22,6 @@
     "forceConsistentCasingInFileNames": true,
     "plugins": [{ "name": "next" }],
 
-    /* Carrega apenas estes pacotes de tipos (bloqueia tipos estranhos) */
     "types": ["next", "react", "react-dom", "node"]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
