@@ -22,7 +22,15 @@ export const viewport: Viewport = {
     ],
 };
 
+const metadataBase =
+process.env.NEXT_PUBLIC_SITE_URL
+? new URL(process.env.NEXT_PUBLIC_SITE_URL)
+: process.env.VERCEL_URL
+? new URL(`https://${process.env.VERCEL_URL}`)
+: new URL("http://localhost:3000");
+
 export const metadata: Metadata = {
+    metadataBase, // ✅ resolve URLs absolutas (OG/Twitter/etc.)
     title: {
         default: "Agenda — Vânia Maria",
             template: "%s · Agenda — Vânia Maria",
@@ -39,7 +47,7 @@ export const metadata: Metadata = {
         apple: [{ url: "/icons/icon-192.png" }],
     },
     manifest: "/manifest.webmanifest",
-    themeColor: "#0f1215",
+    // ❌ NÃO declare themeColor aqui (já está no viewport)
     openGraph: {
         title: "Agenda — Vânia Maria",
         description:
@@ -76,8 +84,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         ].join(" ")}
         >
         {children}
-
-        {/* SW para PWA – registra após a interação para não impactar a pintura inicial */}
         <Script id="pwa-sw" strategy="afterInteractive">
         {`if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js').catch(() => {});
