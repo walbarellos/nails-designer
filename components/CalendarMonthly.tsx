@@ -260,8 +260,8 @@ type DayMeta = {
     byStatus: Record<"scheduled" | "confirmed" | "done" | "canceled", number>;
 };
 
-function renderBadges(meta: DayMeta) {
-    const parts: JSX.Element[] = [];
+function renderBadges(meta: DayMeta): React.ReactElement[] {
+    const parts: React.ReactElement[] = [];
     const fmt = (n: number, label: string, color: string, subtle = false) => (
         <span
         key={label}
