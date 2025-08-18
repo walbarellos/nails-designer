@@ -13,13 +13,11 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["./*"]
-    },
+    "paths": { "@/*": ["./*"] },
     "types": [
-      "react/next",
-      "react-dom/next",
       "next/types/global",
+      "react",
+      "react-dom",
       "vitest",
       "node"
     ],
