@@ -2,26 +2,14 @@ import React, { useMemo } from "react";
 
 /**
  * components/CalendarMonthly.tsx
- * Calendário mensal 7x6 com:
- *  - Contagem por status (opcional via appointments)
- *  - Dias "marcados" em vermelho (markedDays Set<yyyy-mm-dd>)
- *  - Bloqueio de dias passados via minDate (botão desabilitado)
- *
- * Props:
- * - year, month (0..11)
- * - appointments: Appointment[] (pode ser [])
- * - onSelectDay?: (date: Date | null) => void
- * - markedDays?: Set<string>  // yyyy-mm-dd
- * - minDate?: Date            // dias < minDate ficam bloqueados
- * - className?: string
+ * + slotsByDay?: Record<"yyyy-mm-dd", number>  // NOVO: qte de horários reservados no dia
  */
 
 export type Appointment = {
     id: string;
     name: string;
     phone: string;
-    serviceId?: string;
-    startsAt: string; // ISO
+    startsAt: string;
     notes?: string;
     status: "scheduled" | "confirmed" | "done" | "canceled";
     createdAt: string;
@@ -34,8 +22,9 @@ export type CalendarMonthlyProps = {
     appointments: Appointment[];
     onSelectDay?: (date: Date | null) => void;
     markedDays?: Set<string>;
-    minDate?: Date; // NOVO: bloqueia dias menores que este (ex.: start of today)
+    minDate?: Date;
     className?: string;
+    slotsByDay?: Record<string, number>; // <<< NOVO
 };
 
 export default function CalendarMonthly({
@@ -46,6 +35,7 @@ export default function CalendarMonthly({
     markedDays,
     minDate,
     className,
+    slotsByDay,
 }: CalendarMonthlyProps) {
     const today = new Date();
     const first = new Date(year, month, 1);
@@ -55,9 +45,7 @@ export default function CalendarMonthly({
                                        [year, month, appointments]
     );
 
-    // normaliza minDate para 00:00 local
     const minDayStart = minDate ? startOfDay(minDate) : null;
-
     const monthLabel = first.toLocaleDateString(undefined, {
         month: "long",
         year: "numeric",
@@ -98,12 +86,12 @@ export default function CalendarMonthly({
                     cell.day
                 ).padStart(2, "0")}`;
                 const isMarked = markedDays?.has(isoDay) ?? false;
+                const takenCount = slotsByDay?.[isoDay] ?? 0; // <<< NOVO
 
-                // BLOQUEIO: se minDate informado e a célula < minDate ⇒ disabled
                 const isDisabled =
                 !!minDayStart && startOfDay(cell.date).getTime() < minDayStart.getTime();
 
-                const aria = buildAria(meta, isToday, isDisabled);
+                const aria = buildAria(meta, isToday, isDisabled, takenCount);
 
                 return (
                     <button
@@ -113,7 +101,7 @@ export default function CalendarMonthly({
                     onClick={() => !isDisabled && onSelectDay?.(cell.date)}
                     disabled={isDisabled}
                     className={[
-                        "group h-20 rounded-xl border p-2 text-left outline-none transition",
+                        "group relative h-20 rounded-xl border p-2 text-left outline-none transition",
                         "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-indigo-500",
                         isToday ? "border-indigo-500" : "border-white/10",
                         meta.total > 0 ? "bg-white/5 hover:bg-white/10" : "bg-white/0 hover:bg-white/5",
@@ -129,19 +117,19 @@ export default function CalendarMonthly({
                     >
                     {cell.day}
                     </span>
-                    {meta.total > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-white/70">
-                        <Dot className="bg-emerald-400" />
-                        {meta.done > 0 ? meta.done : null}
-                        <Dot className="bg-sky-400" />
-                        {meta.confirmed > 0 ? meta.confirmed : null}
-                        <Dot className="bg-amber-300" />
-                        {meta.scheduled > 0 ? meta.scheduled : null}
-                        <Dot className="bg-rose-400" />
-                        {meta.canceled > 0 ? meta.canceled : null}
+
+                    {/* Badge de horários tomados (vermelho) */}
+                    {takenCount > 0 && (
+                        <span
+                        className="rounded-full bg-rose-500/80 px-2 py-0.5 text-[10px] font-semibold text-white"
+                        aria-label={`${takenCount} horário(s) reservado(s)`}
+                        title={`${takenCount} horário(s) reservado(s)`}
+                        >
+                        {takenCount}
                         </span>
                     )}
                     </div>
+
                     {meta.total > 0 && <div className="mt-2 flex flex-wrap gap-1">{renderBadges(meta)}</div>}
                     </button>
                 );
@@ -207,7 +195,6 @@ function buildMatrix(year: number, month: number, appts: Appointment[]) {
     const rows: Array<typeof cells> = [];
     for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
 
-    // Metadados por dia (para contagens/legenda)
     const daysMeta = new Map<number, DayMeta>();
     for (let d = 1; d <= totalDays; d++) daysMeta.set(d, emptyDayMeta(new Date(year, month, d)));
 
@@ -286,7 +273,7 @@ function renderBadges(meta: DayMeta): React.ReactElement[] {
     return parts;
 }
 
-function buildAria(meta: DayMeta, isToday: boolean, isDisabled: boolean) {
+function buildAria(meta: DayMeta, isToday: boolean, isDisabled: boolean, takenCount: number) {
     const dateLabel = meta.date.toLocaleDateString(undefined, {
         day: "2-digit",
         month: "long",
@@ -295,6 +282,7 @@ function buildAria(meta: DayMeta, isToday: boolean, isDisabled: boolean) {
     const pieces: string[] = [dateLabel];
     if (isToday) pieces.push("(hoje)");
     if (isDisabled) pieces.push("(indisponível)");
+    if (takenCount > 0) pieces.push(`${takenCount} horário(s) reservado(s)`);
     if (meta.total === 0) pieces.push("sem agendamentos");
     else {
         pieces.push(`${meta.total} agendamento(s)`);

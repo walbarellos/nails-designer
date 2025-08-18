@@ -6,9 +6,11 @@ import HeroLogo from '@/components/HeroLogo'
 const MARK_KEY   = 'nails.v1.markedDays'
 const LAST_KEY   = 'nails.v1.lastView'
 const PROTO_KEY  = 'nails.v1.protocols'
-const VANIA_PHONE = '+556884257558' // Vânia
+const SLOTS_KEY  = 'nails.v1.slots'          // <<< NOVO: mapa dia -> array de horários 'HH:MM'
+const VANIA_PHONE = '+556884257558'
 
 type LastView = { year: number; month: number }
+type SlotsMap = Record<string, string[]> // { '2025-08-17': ['18:00','19:30'] }
 
 // ---------- utils ----------
 function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d }
@@ -32,6 +34,8 @@ function loadMarked():Set<string>{ try{ const raw=localStorage.getItem(MARK_KEY)
 function saveMarked(set:Set<string>){ try{ localStorage.setItem(MARK_KEY, JSON.stringify(Array.from(set))) }catch{} }
 function loadLastView():LastView|null{ try{ return JSON.parse(localStorage.getItem(LAST_KEY)||'null') }catch{ return null } }
 function saveLastView(v:LastView){ try{ localStorage.setItem(LAST_KEY, JSON.stringify(v)) }catch{} }
+function loadSlots():SlotsMap{ try{ return JSON.parse(localStorage.getItem(SLOTS_KEY)||'{}') }catch{ return {} } }
+function saveSlots(m:SlotsMap){ try{ localStorage.setItem(SLOTS_KEY, JSON.stringify(m)) }catch{} }
 
 // ---------- página ----------
 export default function Page(){
@@ -43,16 +47,30 @@ export default function Page(){
   const [selectedDay,setSelectedDay]=useState<Date|null>(null)
   const [open,setOpen]=useState(false)
 
+  const [slots,setSlots]=useState<SlotsMap>(()=>loadSlots()) // <<< NOVO
+
   useEffect(()=>{ saveLastView({year,month}) },[year,month])
 
-  function onPrevMonth(){ const d=new Date(year,month-1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
   function onNextMonth(){ const d=new Date(year,month+1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
   function onSelectDay(d:Date|null){ if(!d) return; if(startOfDay(d)<startOfToday()) return; setSelectedDay(d); setOpen(true) }
+
   function markDay(date:Date){ const key=yyyymmdd(date); setMarkedDays(prev=>{ const next=new Set(prev); next.add(key); saveMarked(next); return next }) }
+  function addSlot(date:Date, hhmm:string){
+    const day=yyyymmdd(date)
+    setSlots(prev=>{
+      const next:{[k:string]:string[]} = { ...prev }
+      const arr = new Set([...(next[day]||[]), hhmm])
+      next[day] = Array.from(arr).sort()
+      saveSlots(next)
+      return next
+    })
+  }
+
+  // mapa dia -> contagem (para o calendário)
+  const slotsByDay = Object.fromEntries(Object.entries(slots).map(([d,arr])=>[d, arr.length]))
 
   return (
     <main className="container-max py-6 space-y-6">
-    {/* === ÚNICO HEADER === */}
     <header className="border-b border-white/10 pb-4">
     <div className="flex items-center gap-4">
     <HeroLogo />
@@ -61,13 +79,12 @@ export default function Page(){
     <p className="text-sm text-white/60">Selecionar dia futuro, escolher horário e enviar confirmação.</p>
     </div>
     <div className="ml-auto flex items-center gap-2">
-    <button className="btn" onClick={onPrevMonth}>Mês anterior</button>
+    {/* Removido: Mês anterior */}
     <button className="btn" onClick={onNextMonth}>Próximo mês</button>
     </div>
     </div>
     </header>
 
-    {/* === ÚNICO CALENDÁRIO === */}
     <section className="card p-4 sm:p-5">
     <CalendarMonthly
     year={year}
@@ -76,13 +93,20 @@ export default function Page(){
     onSelectDay={onSelectDay}
     markedDays={markedDays}
     minDate={startOfToday()}
+    slotsByDay={slotsByDay}    // <<< NOVO
     />
     </section>
 
     <QuickDialog
     open={open}
     date={selectedDay}
-    onClose={(sent)=>{ setOpen(false); if(sent&&selectedDay) markDay(selectedDay) }}
+    onClose={(sent, hhmm)=>{
+      setOpen(false);
+      if(sent && selectedDay && hhmm){
+        markDay(selectedDay);
+        addSlot(selectedDay, hhmm);
+      }
+    }}
     />
     </main>
   )
@@ -92,7 +116,7 @@ export default function Page(){
 function QuickDialog({
   open, onClose, date
 }:{
-  open:boolean; onClose:(sent:boolean)=>void; date:Date|null
+  open:boolean; onClose:(sent:boolean, hhmm?:string)=>void; date:Date|null
 }){
   const [clientPhone,setClientPhone]=useState('')
   const [time,setTime]=useState('')
@@ -108,6 +132,7 @@ function QuickDialog({
       if(!clientPhone.trim()) return alert('Informe o WhatsApp da cliente.')
         if(!time) return alert('Escolha o horário.')
           if(!isHourAllowed(date,time)) return alert('Horário fora do atendimento: Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.')
+
             const protocol = proto || getOrCreateProtocol(dayStr, clientPhone)
             const msg =
             `Agendamento confirmado para ${dLabel} às ${ptTime(time)}.%0A` +
@@ -117,7 +142,7 @@ function QuickDialog({
             const e164 = toE164OrDigits(VANIA_PHONE)
             window.open(`https://wa.me/${encodeURIComponent(e164.replace('+',''))}?text=${msg}`,'_blank')
             try{ await navigator.clipboard.writeText(protocol) }catch{}
-            onClose(true)
+            onClose(true, time)                 // <<< devolve o horário escolhido
     }
 
     return (
@@ -131,14 +156,13 @@ function QuickDialog({
       <p className="text-sm text-white/80 mb-3">Dia selecionado: <strong>{dLabel}</strong></p>
 
       <label className="label" htmlFor="cli">WhatsApp da cliente</label>
-      <input
-      id="cli" className="input mb-3 text-base" inputMode="tel"
+      <input id="cli" className="input mb-3 text-base" inputMode="tel"
       placeholder="(DD) 9XXXX-XXXX ou +55..." value={clientPhone}
-      onChange={e=>updatePhone(e.target.value)} autoFocus
-      />
+      onChange={e=>updatePhone(e.target.value)} autoFocus />
 
       <label className="label" htmlFor="hhmm">Horário</label>
-      <input id="hhmm" type="time" className="input mb-2 text-base" value={time} onChange={e=>setTime(e.target.value)} />
+      <input id="hhmm" type="time" className="input mb-2 text-base"
+      value={time} onChange={e=>setTime(e.target.value)} />
       <p className="text-xs text-white/60 mb-3">Seg–Sex ≥18:00 · Sáb ≥13:00 · Dom 08:00–20:00.</p>
 
       {proto && (
