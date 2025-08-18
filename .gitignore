@@ -20,3 +20,4 @@ coverage/
 # SO/Editor
 .DS_Store
 *.swp
+.git.bak/
