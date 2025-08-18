@@ -1,0 +1,89 @@
+Fase 1 — Especificação e Planejamento (MVP sem backend)
+1) Objetivo
+
+Criar uma landing que permita:
+
+Gerar agendamentos (nome, telefone, serviço, data, hora, observações).
+
+Abrir WhatsApp com mensagem pré-formatada para confirmação.
+
+Registrar localmente (TTL ≤ 30 dias) e exibir Próximos agendamentos (lista).
+
+(Opcional) Exibir um calendário cosmético mensal com “pontinhos” de dias com atendimento.
+
+Sem pagamentos, notas fiscais, multiusuário ou sincronização na nuvem.
+
+2) Escopo Funcional (MVP)
+
+F1. Landing & Serviços
+
+Lista de serviços (cards com nome, duração e preço sugerido opcional).
+
+CTA “Agendar” em cada card.
+
+F2. Modal de Agendamento
+
+Campos: Nome, Telefone (BR), Serviço, Data, Hora, Observações.
+
+Validação: nome não vazio; telefone válido; data/hora futuras; serviço obrigatório.
+
+F3. Geração de Mensagem (WhatsApp)
+
+Template curto e claro; abrir wa.me/<telefone>?text=<mensagem>.
+
+F4. Persistência local com TTL
+
+Salvar agendamentos no localStorage com createdAt e startsAt.
+
+Expurgo automático: remover itens com startsAt < now - 30 dias.
+
+F5. Lista “Próximos (≤30 dias)”
+
+Ordenada por data/hora; ações: Abrir WhatsApp, alterar status (agendado/confirmado/concluído/cancelado).
+
+F6. Calendário Cosmético (Opcional)
+
+Grade 7×6 (Seg-Dom) com badge por dia que tenha atendimento (estética).
+
+F7. Backup/Restore (Qualquer aparelho)
+
+Exportar JSON; Importar JSON.
+
+(PWA opcional, apenas acesso rápido; sem cache complexo.)
+
+3) Requisitos Não Funcionais
+
+RNF1. Desempenho: LCP < 2,5s na Vercel; bundle enxuto; sem libs pesadas desnecessárias.
+RNF2. Acessibilidade: labels, aria, foco, contraste ≥ 4.5:1, navegação por teclado.
+RNF3. Segurança básica: sanitizar telefone e texto; não injetar HTML; nada sensível persistido.
+RNF4. Manutenibilidade: TS estrito, ESLint/Prettier; componentes desacoplados.
+RNF5. Privacidade: dados inteiramente locais; exportação voluntária.
+RNF6. Portabilidade: deploy Vercel sem variáveis de ambiente; zero backend.
+
+4) Fluxos Principais
+
+Fluxo A — Agendar e enviar pelo WhatsApp
+
+Usuária clica em “Agendar”.
+
+Preenche o modal (form).
+
+Clica “Gerar WhatsApp” → abre wa.me com mensagem.
+
+Clica “Salvar local” → grava no localStorage e mostra na lista/calendário.
+
+Fluxo B — Usar lista “Próximos”
+
+Acessa a landing; purge TTL roda automaticamente.
+
+Vê agendamentos dos próximos 30 dias.
+
+Ações por item: “Abrir WA”, “Confirmar”, “Concluir”, “Cancelar”.
+
+Fluxo C — Backup/Restore
+
+“Exportar JSON” → baixa arquivo.
+
+“Importar JSON” → carrega arquivo e substitui/merge conforme versão.
+
+5) Modelo de Dados (local)

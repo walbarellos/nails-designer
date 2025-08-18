@@ -1,0 +1,681 @@
+# 📦 Projeto: Landing Agenda Nails — Ciclo 1 (MVP sem backend)
+
+> **Incluso neste ciclo**: esqueleto Next.js (App Router) + Tailwind; persistência local com TTL (30 dias); regras de horário (Seg–Sex ≥18h; Sáb ≥13h; Dom 08h–20h); buffer 10 min; prevenção de sobreposição; modal de novo agendamento; lista de próximos; calendário mensal com marcações; backup/restaurar JSON; link rápido para WhatsApp.
+
+---
+
+## 0) Estrutura de pastas
+
+```
+.
+├─ app/
+│  ├─ layout.tsx
+│  ├─ page.tsx
+│  └─ globals.css
+├─ components/
+│  ├─ BookingDialog.tsx
+│  ├─ UpcomingList.tsx
+│  └─ CalendarMonthly.tsx   # usar o componente já enviado no canvas anterior
+├─ lib/
+│  ├─ schema.ts
+│  ├─ phone.ts
+│  ├─ time.ts
+│  ├─ store.ts
+│  └─ wa.ts
+├─ public/
+│  └─ favicon.ico  # (placeholder)
+├─ next.config.ts
+├─ package.json
+├─ postcss.config.mjs
+├─ tailwind.config.ts
+└─ tsconfig.json
+```
+
+> **Nota**: o arquivo `components/CalendarMonthly.tsx` já foi entregue no canvas anterior. Reutilize-o.
+
+---
+
+## 1) package.json
+
+```json
+{
+  "name": "nails-agenda-mvp",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-hook-form": "^7.51.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "typescript": "5.5.4"
+  }
+}
+```
+
+---
+
+## 2) next.config.ts
+
+```ts
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
+  reactStrictMode: true,
+}
+export default nextConfig
+```
+
+---
+
+## 3) tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "types": ["react/next", "react-dom/next"]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
+```
+
+---
+
+## 4) tailwind.config.ts
+
+```ts
+import type { Config } from 'tailwindcss'
+
+export default {
+  content: [
+    './app/**/*.{ts,tsx}',
+    './components/**/*.{ts,tsx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        ink: '#e6e7ea',
+        panel: '#111316',
+        panel2: '#0c0e10',
+      }
+    },
+  },
+  plugins: [],
+} satisfies Config
+```
+
+---
+
+## 5) postcss.config.mjs
+
+```js
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+```
+
+---
+
+## 6) app/globals.css
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  @apply bg-panel text-ink antialiased;
+}
+
+.container-max { @apply max-w-5xl mx-auto px-4; }
+.card { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg; }
+.btn { @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border border-white/10 bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+.btn-primary { @apply bg-indigo-600 hover:bg-indigo-500 border-transparent; }
+.input { @apply w-full rounded-lg border border-white/10 bg-panel2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+.label { @apply block text-sm mb-1 text-white/70; }
+.badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]; }
+```
+
+---
+
+## 7) app/layout.tsx
+
+```tsx
+import type { Metadata } from 'next'
+import './globals.css'
+
+export const metadata: Metadata = {
+  title: 'Agenda Nails – Controle Rápido',
+  description: 'Landing simples para controle de agendamentos (30 dias) com WhatsApp.',
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="pt-BR">
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+---
+
+## 8) lib/schema.ts
+
+```ts
+import { z } from 'zod'
+
+export const StatusEnum = z.enum(['scheduled','confirmed','done','canceled'])
+
+export const AppointmentSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1, 'Informe o nome'),
+  phone: z.string().min(8, 'Telefone inválido'),
+  startsAt: z.string().refine((v)=>!Number.isNaN(Date.parse(v)), 'Data/Hora inválidas'),
+  notes: z.string().optional(),
+  status: StatusEnum,
+  createdAt: z.string(),
+  version: z.literal(1)
+})
+
+export type Appointment = z.infer<typeof AppointmentSchema>
+
+export const NewAppointmentSchema = z.object({
+  name: z.string().min(1, 'Informe o nome'),
+  phone: z.string().min(8, 'Telefone inválido'),
+  date: z.string().min(1, 'Informe a data'),      // yyyy-mm-dd
+  time: z.string().min(1, 'Informe a hora'),      // HH:mm
+  notes: z.string().optional(),
+})
+
+export type NewAppointment = z.infer<typeof NewAppointmentSchema>
+```
+
+---
+
+## 9) lib/phone.ts
+
+```ts
+// Sanitiza telefone para um formato aceitável pelo wa.me
+// Preferência: E.164. Se não conseguir, remove não dígitos e tenta com BR (+55).
+export function toE164OrDigits(input: string): string {
+  const raw = (input || '').trim()
+  if (!raw) return ''
+  // já E.164
+  if (/^\+?[1-9]\d{7,14}$/.test(raw)) {
+    return raw.startsWith('+') ? raw : ('+'+raw)
+  }
+  // remove não dígitos
+  const digits = raw.replace(/\D+/g, '')
+  if (digits.length >= 10 && digits.length <= 13) {
+    // heurística: se não vier com +, assume BR
+    return '+55' + digits.replace(/^0+/, '')
+  }
+  return digits // fallback: ainda funciona em alguns casos com wa.me
+}
+```
+
+---
+
+## 10) lib/time.ts
+
+```ts
+// Utilitários de data/tempo e regras de janela/TTL
+
+export function iso(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset()*60000).toISOString().slice(0,16)
+}
+
+export function parseDateTime(date: string, time: string): Date {
+  // espera yyyy-mm-dd e HH:mm
+  const [y,m,d] = date.split('-').map(Number)
+  const [hh,mm] = time.split(':').map(Number)
+  return new Date(y, (m-1), d, hh, mm, 0, 0)
+}
+
+export function addMinutes(dt: Date, minutes: number){
+  return new Date(dt.getTime() + minutes*60000)
+}
+
+export function startOfDay(d: Date){ const x=new Date(d); x.setHours(0,0,0,0); return x }
+export function isPast(dt: Date){ return dt.getTime() < Date.now() }
+
+export function weekday(dt: Date){
+  // 0=Dom, 1=Seg, ... 6=Sáb
+  return dt.getDay()
+}
+
+// Regras: Seg–Sex a partir das 18:00; Sáb a partir das 13:00; Dom 08:00–20:00
+export function isWithinWorkingHours(dt: Date) {
+  const w = weekday(dt)
+  const h = dt.getHours()
+  const m = dt.getMinutes()
+  const hm = h*60 + m
+  if (w>=1 && w<=5) { // Seg–Sex
+    return hm >= (18*60)
+  }
+  if (w===6) { // Sáb
+    return hm >= (13*60)
+  }
+  // Domingo
+  return hm >= (8*60) && hm <= (20*60)
+}
+
+export function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+  return aStart < bEnd && bStart < aEnd
+}
+
+export function purgeOlderThan(days: number, list: { startsAt: string }[]) {
+  const limit = addMinutes(new Date(), -days*24*60)
+  return list.filter(i => new Date(i.startsAt) >= limit)
+}
+
+export function formatPt(dt: Date){
+  const d = dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const t = dt.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
+  return { d, t }
+}
+```
+
+---
+
+## 11) lib/store.ts
+
+```ts
+import type { Appointment } from './schema'
+import { purgeOlderThan } from './time'
+
+const KEY = 'nails.v1.appointments'
+
+export function loadAppointments(): Appointment[] {
+  if (typeof localStorage === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(KEY)
+    const data = raw ? JSON.parse(raw) as Appointment[] : []
+    // TTL 30 dias
+    const fresh = purgeOlderThan(30, data)
+    if (fresh.length !== data.length) {
+      localStorage.setItem(KEY, JSON.stringify(fresh))
+    }
+    return fresh
+  } catch {
+    return []
+  }
+}
+
+export function saveAppointments(items: Appointment[]) {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(KEY, JSON.stringify(items))
+}
+
+export function backupJSON(): string {
+  return JSON.stringify(loadAppointments(), null, 2)
+}
+
+export function restoreJSON(json: string): Appointment[] {
+  const arr = JSON.parse(json) as Appointment[]
+  saveAppointments(arr)
+  return arr
+}
+```
+
+---
+
+## 12) lib/wa.ts
+
+```ts
+import { formatPt } from './time'
+import { toE164OrDigits } from './phone'
+
+export function buildWhatsAppLink(name: string, phone: string, when: Date, notes?: string) {
+  const { d, t } = formatPt(when)
+  const msg = `Olá, ${name}! 💅%0A`+
+              `Agendamento:%0A`+
+              `• Data: ${d}%0A`+
+              `• Hora: ${t}%0A`+
+              `Obs.: ${notes?.trim() || '-'}%0A`+
+              `%0ASe precisar ajustar, me avise por aqui. ✨`
+  const ph = toE164OrDigits(phone)
+  return `https://wa.me/${encodeURIComponent(ph.replace('+',''))}?text=${msg}`
+}
+```
+
+---
+
+## 13) components/BookingDialog.tsx
+
+```tsx
+'use client'
+import { useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { NewAppointmentSchema, type NewAppointment, type Appointment } from '@/lib/schema'
+import { parseDateTime, addMinutes, isWithinWorkingHours, overlaps } from '@/lib/time'
+
+const DEFAULT_DURATION = 60 // minutos
+const BUFFER_MIN = 10
+
+export default function BookingDialog({
+  open, onClose, onCreate, existing
+}: {
+  open: boolean
+  onClose: () => void
+  onCreate: (a: Appointment) => void
+  existing: Appointment[]
+}) {
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<NewAppointment>({
+    resolver: zodResolver(NewAppointmentSchema)
+  })
+
+  useEffect(()=>{
+    if (!open) reset()
+  }, [open, reset])
+
+  const onSubmit = (data: NewAppointment) => {
+    const when = parseDateTime(data.date, data.time)
+    // Janela de funcionamento
+    if (!isWithinWorkingHours(when)) {
+      alert('Fora do horário de atendimento: Seg–Sex ≥ 18:00; Sáb ≥ 13:00; Dom 08:00–20:00.')
+      return
+    }
+    const start = when
+    const end = addMinutes(start, DEFAULT_DURATION + BUFFER_MIN)
+    // Conflitos
+    const conflict = existing.some(x => {
+      const xs = new Date(x.startsAt)
+      const xe = addMinutes(xs, DEFAULT_DURATION + BUFFER_MIN)
+      return overlaps(start, end, xs, xe) && (x.status==='scheduled' || x.status==='confirmed')
+    })
+    if (conflict) {
+      alert('Conflito de horário com outro agendamento.')
+      return
+    }
+    const id = cryptoRandom()
+    const a: Appointment = {
+      id,
+      name: data.name.trim(),
+      phone: data.phone.trim(),
+      startsAt: when.toISOString(),
+      notes: data.notes?.trim(),
+      status: 'scheduled',
+      createdAt: new Date().toISOString(),
+      version: 1,
+    }
+    onCreate(a)
+    onClose()
+  }
+
+  return (
+    <dialog open={open} className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+      <div className="card w-full max-w-md p-4">
+        <header className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Novo agendamento</h3>
+          <button className="btn" onClick={onClose}>Fechar</button>
+        </header>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <div>
+            <label className="label">Nome</label>
+            <input className="input" {...register('name')} placeholder="Nome da cliente"/>
+            {errors.name && <p className="text-xs text-rose-300 mt-1">{errors.name.message}</p>}
+          </div>
+          <div>
+            <label className="label">Telefone</label>
+            <input className="input" {...register('phone')} placeholder="(DDD) 9...."/>
+            {errors.phone && <p className="text-xs text-rose-300 mt-1">{errors.phone.message}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Data</label>
+              <input type="date" className="input" {...register('date')}/>
+              {errors.date && <p className="text-xs text-rose-300 mt-1">{errors.date.message}</p>}
+            </div>
+            <div>
+              <label className="label">Hora</label>
+              <input type="time" className="input" {...register('time')}/>
+              {errors.time && <p className="text-xs text-rose-300 mt-1">{errors.time.message}</p>}
+            </div>
+          </div>
+          <div>
+            <label className="label">Observações (opcional)</label>
+            <textarea className="input" rows={3} {...register('notes')} placeholder="Preferências, referências..." />
+          </div>
+          <div className="pt-2 flex items-center justify-end gap-2">
+            <button type="button" className="btn" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn-primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+  )
+}
+
+function cryptoRandom(){
+  try { return crypto.randomUUID() } catch { return Math.random().toString(36).slice(2) }
+}
+```
+
+---
+
+## 14) components/UpcomingList.tsx
+
+```tsx
+'use client'
+import { buildWhatsAppLink } from '@/lib/wa'
+import type { Appointment } from '@/lib/schema'
+import { addMinutes, formatPt } from '@/lib/time'
+
+const DEFAULT_DURATION = 60
+const BUFFER_MIN = 10
+
+export default function UpcomingList({ items, onUpdate }:{ items: Appointment[], onUpdate:(items: Appointment[])=>void }){
+  const sorted = [...items].sort((a,b)=> (a.startsAt.localeCompare(b.startsAt)))
+
+  function setStatus(id: string, status: Appointment['status']){
+    onUpdate(sorted.map(x => x.id===id ? { ...x, status } : x))
+  }
+
+  return (
+    <section className="card p-4">
+      <header className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Próximos 30 dias</h3>
+      </header>
+      {sorted.length===0 && (
+        <p className="text-white/60 text-sm">Sem agendamentos nos próximos 30 dias.</p>
+      )}
+      <ul className="space-y-2">
+        {sorted.map(a => {
+          const when = new Date(a.startsAt)
+          const { d, t } = formatPt(when)
+          const wa = buildWhatsAppLink(a.name, a.phone, when, a.notes)
+          const end = addMinutes(when, DEFAULT_DURATION)
+          return (
+            <li key={a.id} className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div>
+                <div className="text-sm font-medium">{a.name} <span className="text-white/50">({a.phone})</span></div>
+                <div className="text-xs text-white/70">{d} · {t} – {formatPt(end).t}</div>
+                {a.notes && <div className="mt-1 text-xs text-white/60">{a.notes}</div>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <StatusBadge status={a.status} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <a href={wa} target="_blank" className="btn" rel="noreferrer">WhatsApp</a>
+                <button className="btn" onClick={()=>setStatus(a.id,'confirmed')}>Confirmar</button>
+                <button className="btn" onClick={()=>setStatus(a.id,'done')}>Concluir</button>
+                <button className="btn" onClick={()=>setStatus(a.id,'canceled')}>Cancelar</button>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function StatusBadge({ status }:{ status: Appointment['status'] }){
+  const map: Record<Appointment['status'], { label: string; cls: string }> = {
+    scheduled: { label:'Agendado', cls:'bg-amber-300 text-slate-900' },
+    confirmed: { label:'Confirmado', cls:'bg-sky-400 text-slate-900' },
+    done:      { label:'Concluído', cls:'bg-emerald-400 text-slate-900' },
+    canceled:  { label:'Cancelado', cls:'bg-rose-400 text-slate-900' },
+  }
+  const it = map[status]
+  return <span className={`badge ${it.cls}`}>{it.label}</span>
+}
+```
+
+---
+
+## 15) app/page.tsx
+
+```tsx
+'use client'
+import { useEffect, useMemo, useState } from 'react'
+import { loadAppointments, saveAppointments, backupJSON, restoreJSON } from '@/lib/store'
+import type { Appointment } from '@/lib/schema'
+import BookingDialog from '@/components/BookingDialog'
+import CalendarMonthly from '@/components/CalendarMonthly'
+
+export default function Page(){
+  const today = new Date()
+  const [year, setYear] = useState(today.getFullYear())
+  const [month, setMonth] = useState(today.getMonth())
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  const [items, setItems] = useState<Appointment[]>([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(()=>{ setItems(loadAppointments()) },[])
+  useEffect(()=>{ saveAppointments(items) },[items])
+
+  const filtered = useMemo(()=>{
+    if (!selectedDay) return items
+    return items.filter(a => {
+      const dt = new Date(a.startsAt)
+      return dt.getFullYear()===selectedDay.getFullYear()
+        && dt.getMonth()===selectedDay.getMonth()
+        && dt.getDate()===selectedDay.getDate()
+    })
+  }, [items, selectedDay])
+
+  function onPrevMonth(){
+    const d = new Date(year, month-1, 1)
+    setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null)
+  }
+  function onNextMonth(){
+    const d = new Date(year, month+1, 1)
+    setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null)
+  }
+
+  function onImport(){
+    const input = document.createElement('input')
+    input.type = 'file'; input.accept = 'application/json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const text = await file.text()
+      const restored = restoreJSON(text)
+      setItems(restored)
+    }
+    input.click()
+  }
+
+  return (
+    <main className="container-max py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Agenda Nails — Controle</h1>
+          <p className="text-white/60 text-sm">Dados locais com retenção de 30 dias. Sem login, sem backend.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="btn" onClick={()=>setOpen(true)}>Novo agendamento</button>
+          <button className="btn" onClick={()=>{
+            const blob = new Blob([backupJSON()], { type:'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url; a.download = 'backup-agenda.json'; a.click(); URL.revokeObjectURL(url)
+          }}>Backup JSON</button>
+          <button className="btn" onClick={onImport}>Restaurar JSON</button>
+          <button className="btn" onClick={()=>{ if(confirm('Limpar todos os dados?')) setItems([]) }}>Limpar</button>
+        </div>
+      </header>
+
+      <section className="mb-6 card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Calendário</h2>
+          <div className="flex items-center gap-2">
+            <button className="btn" onClick={onPrevMonth}>Mês anterior</button>
+            <button className="btn" onClick={onNextMonth}>Próximo mês</button>
+          </div>
+        </div>
+        <CalendarMonthly
+          year={year}
+          month={month}
+          appointments={items}
+          onSelectDay={setSelectedDay}
+        />
+      </section>
+
+      <section>
+        <UpcomingList items={filtered} onUpdate={setItems} />
+      </section>
+
+      <BookingDialog open={open} onClose={()=>setOpen(false)} existing={items} onCreate={(a)=>setItems(prev=>[...prev, a])} />
+    </main>
+  )
+}
+
+function UpcomingList({ items, onUpdate }:{ items: Appointment[], onUpdate:(items: Appointment[])=>void }){
+  // reexporta do arquivo dedicado para simplificar o ciclo 1
+  const Comp = require('@/components/UpcomingList').default
+  return <Comp items={items} onUpdate={onUpdate} />
+}
+```
+
+---
+
+### Observações finais do Ciclo 1
+
+* Código **sem dependências pesadas**; **navegação de mês** inclusa; **calendário leve** já integrado.
+* **TTL 30 dias** ativo; **backup/restauração** simples.
+* **Regras de funcionamento** aplicadas no cadastro; **buffer 10 min** + **prevenção de sobreposição**.
+* **WhatsApp**: link pronto por item, mensagem curta.
+
+### Próximo passo (Ciclo 2)
+
+* Refinos de UI (ícones, estados de loading), máscaras de telefone e testes de usabilidade.
+* (Opcional) PWA: `manifest.webmanifest` + ícones.

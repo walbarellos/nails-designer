@@ -1,0 +1,133 @@
+**DER (Diagrama Entidade-Relacionamento)** em dois níveis: **MVP (local, TTL ≤ 30 dias)** e **Pro (evolutivo, nuvem)**. Mantém coerência com o MER já aprovado e prepara migração sem reescrita conceitual.
+
+# DER — MVP (localStorage, sem backend)
+
+> Entidades efetivas: **Service** e **Appointment**. “Cliente” e “Profissional” não são entidades; o nome/telefone da cliente residem no próprio agendamento.
+
+```mermaid
+erDiagram
+  SERVICE ||--o{ APPOINTMENT : "é escolhido por"
+
+  SERVICE {
+    string id PK
+    string name
+    int    durationMin        // 5..480 (minutos)
+    int    price              // opcional/estético
+    bool   active
+  }
+
+  APPOINTMENT {
+    string id PK              // uuid
+    string name               // nome da cliente
+    string phone              // E.164 sanitizado
+    string serviceId FK       // -> SERVICE.id
+    string startsAt           // ISO (YYYY-MM-DDTHH:mm)
+    string notes
+    enum   status             // scheduled|confirmed|done|canceled
+    string createdAt          // ISO
+    int    version            // = 1
+  }
+```
+
+## Cardinalidades (MVP)
+
+* **SERVICE 1 —— N APPOINTMENT**
+  Um serviço pode estar associado a muitos agendamentos; cada agendamento referencia **exatamente um** serviço.
+
+## Regras de integridade (MVP)
+
+* **TTL**: expurgar `APPOINTMENT.startsAt < now - 30d` ao carregar a página.
+* **Tempo válido**: não criar agendamento no passado.
+* **Telefone**: sanitizar para E.164 antes de compor link `wa.me`.
+* **Status**:
+
+  * `scheduled → confirmed|canceled`
+  * `confirmed → done|canceled`
+  * `done|canceled` são finais (somente edição manual reabre).
+* **(Opcional) Conflito de horário**: calcular `endsAt = startsAt + durationMin` e impedir interseção com outro `APPOINTMENT` cujo `status ∈ {scheduled, confirmed}`.
+
+---
+
+# DER — Pro (evolutivo para nuvem, multi-dispositivo)
+
+> Superset do MVP. Introduz **Professional**, **Client** e **Availability** sem alterar a semântica de **Service**/**Appointment**.
+
+```mermaid
+erDiagram
+  PROFESSIONAL ||--o{ SERVICE      : "oferece"
+  PROFESSIONAL ||--o{ CLIENT       : "administra"
+  PROFESSIONAL ||--o{ APPOINTMENT  : "agenda"
+  PROFESSIONAL ||--o{ AVAILABILITY : "define"
+
+  SERVICE     ||--o{ APPOINTMENT   : "é escolhido por"
+  CLIENT      ||--o{ APPOINTMENT   : "faz"
+
+  PROFESSIONAL {
+    uuid  id PK
+    string name
+    string phone
+  }
+
+  SERVICE {
+    uuid  id PK
+    uuid  professionalId FK
+    string name
+    int    durationMin         // 5..480
+    int    priceCents          // opcional
+    bool   active
+  }
+
+  CLIENT {
+    uuid  id PK
+    uuid  professionalId FK
+    string name
+    string phone               // E.164 (único por professionalId)
+    timestamptz createdAt
+  }
+
+  APPOINTMENT {
+    uuid  id PK
+    uuid  professionalId FK
+    uuid  clientId FK
+    uuid  serviceId FK
+    timestamptz startsAt
+    timestamptz endsAt
+    enum  status               // scheduled|confirmed|done|canceled
+    string notes
+    timestamptz createdAt
+    timestamptz updatedAt
+  }
+
+  AVAILABILITY {
+    uuid  id PK
+    uuid  professionalId FK
+    date  day
+    bool  isBlocked
+    string note
+  }
+```
+
+## Cardinalidades (Pro)
+
+* **PROFESSIONAL 1 —— N SERVICE**
+* **PROFESSIONAL 1 —— N CLIENT**
+* **PROFESSIONAL 1 —— N APPOINTMENT**
+* **SERVICE 1 —— N APPOINTMENT**
+* **CLIENT 1 —— N APPOINTMENT**
+* **PROFESSIONAL 1 —— N AVAILABILITY**
+
+## Regras adicionais (Pro)
+
+* **Não sobreposição** por `professionalId` quando `status ∈ {scheduled, confirmed}`:
+  `a.startsAt < b.endsAt` **e** `b.startsAt < a.endsAt` ⇒ conflito (bloquear).
+* **RLS**/tenant: cada `professionalId` enxerga apenas seus dados.
+* **Índices**: `(professionalId, startsAt)`, `(clientId)`, `unique(professionalId, phone)` em `CLIENT`.
+
+---
+
+## Observações finais
+
+* O **MVP** atende o caso atual (visualização e envio via WhatsApp) com mínimo atrito.
+* O **DER Pro** garante crescimento para multi-dispositivo/backup sem refatorar o domínio.
+
+---

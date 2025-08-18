@@ -1,0 +1,264 @@
+**Fase 2 — MER (Modelo Entidade-Relacionamento)**, alinhada ao escopo **MVP sem backend** (dados locais com TTL ≤ 30 dias) e já prevendo a **evolução opcional Pro** (Supabase/Postgres), sem alterar conceitos.
+
+# 1) Domínio de Dados (MVP)
+
+No MVP, tudo é local (localStorage). Não há multiusuário, logo **Profissional** é implícito (apenas 1). O **Cliente** não é entidade separada: nome/telefone ficam no próprio agendamento para reduzir atrito.
+
+## Entidades (MVP)
+
+* **Service** (catálogo fixo ou editável no cliente)
+
+  * `id` (string)
+  * `name` (string, exibido no WhatsApp)
+  * `durationMin` (int, usado para conflitos/agenda)
+  * `price?` (int, opcional; estética)
+  * `active` (bool)
+
+* **Appointment** (registro local com purga automática por TTL)
+
+  * `id` (uuid)
+  * `name` (string, nome da cliente)
+  * `phone` (string, BR sanitizado → E.164 na geração do link)
+  * `serviceId` (string, FK lógica para Service.id)
+  * `startsAt` (ISO8601 local: `YYYY-MM-DDTHH:mm`)
+  * `notes?` (string)
+  * `status` (enum: `scheduled|confirmed|done|canceled`)
+  * `createdAt` (ISO8601)
+  * `version` (= 1)
+
+### Regras de integridade (MVP)
+
+* **TTL**: ao carregar a página, expurgar `startsAt < now - 30d`.
+* **Horário válido**: não permitir criação no passado.
+* **Choque de horário (opcional)**: impedir sobreposição de `startsAt..(startsAt+durationMin)` com outro `Appointment.status ∈ {scheduled, confirmed}`.
+* **Telefone**: sanitizar para **E.164** (ex.: `+55DDDNNNNNNNN`) para compor `wa.me`.
+* **Status**: transições permitidas:
+
+  * `scheduled → confirmed|canceled`
+  * `confirmed → done|canceled`
+  * `done|canceled` = finais (não voltar, a menos que edição explícita).
+
+---
+
+# 2) Domínio de Dados (Pro — opcional futuro)
+
+Caso precise multi-dispositivo/backup em nuvem sem dor: acrescentamos entidades mantendo o mesmo núcleo sem reescrita conceitual.
+
+* **Professional**
+
+  * `id` (uuid)
+  * `name`, `phone?`
+  * (multi-tenant: chave estrangeira lógica para todos os dados)
+
+* **Client**
+
+  * `id` (uuid)
+  * `name` (string)
+  * `phone` (string E.164, único por profissional)
+  * `createdAt`
+
+* **Service** (igual ao MVP, por profissional)
+
+  * `professionalId` (FK)
+
+* **Appointment**
+
+  * `id` (uuid)
+  * `professionalId` (FK)
+  * `clientId` (FK)
+  * `serviceId` (FK)
+  * `startsAt`, `endsAt` (timestamptz)
+  * `status`, `notes`, `createdAt`, `updatedAt`
+
+* **Availability** (opcional; bloqueios/feriados)
+
+  * `id`, `professionalId`, `date`, `isBlocked`, `note?`
+
+### Regras (Pro)
+
+* **Não sobrepor** `startsAt..endsAt` por `professionalId` quando `status ∈ {scheduled, confirmed}`.
+* **RLS** (Supabase): cada `professionalId` vê apenas seus dados.
+* Índices: `appointments (professionalId, startsAt)`, `appointments (clientId)`, `clients (professionalId, phone unique)`.
+
+---
+
+# 3) MER (texto + diagrama)
+
+## MER — MVP (local)
+
+* **Service (1)** ——< **Appointment (N)**
+  (ligação por `serviceId`, sem tabela Client nem Professional)
+
+## MER — Pro (nuvem)
+
+* **Professional (1)** ——< **Service (N)**
+* **Professional (1)** ——< **Client (N)**
+* **Professional (1)** ——< **Appointment (N)**
+* **Service (1)** ——< **Appointment (N)**
+* **Client (1)** ——< **Appointment (N)**
+* **Professional (1)** ——< **Availability (N)**
+
+### Diagrama (Mermaid – Pro, superset do MVP)
+
+```mermaid
+erDiagram
+  PROFESSIONAL ||--o{ SERVICE : offers
+  PROFESSIONAL ||--o{ CLIENT : owns
+  PROFESSIONAL ||--o{ APPOINTMENT : schedules
+  PROFESSIONAL ||--o{ AVAILABILITY : sets
+
+  SERVICE ||--o{ APPOINTMENT : is_for
+  CLIENT  ||--o{ APPOINTMENT : books
+
+  PROFESSIONAL {
+    uuid id PK
+    string name
+    string phone
+  }
+
+  SERVICE {
+    uuid id PK
+    uuid professionalId FK
+    string name
+    int durationMin
+    int priceCents
+    bool active
+  }
+
+  CLIENT {
+    uuid id PK
+    uuid professionalId FK
+    string name
+    string phone  // E.164, unique per professional
+    timestamptz createdAt
+  }
+
+  APPOINTMENT {
+    uuid id PK
+    uuid professionalId FK
+    uuid clientId FK
+    uuid serviceId FK
+    timestamptz startsAt
+    timestamptz endsAt
+    enum status   // scheduled|confirmed|done|canceled
+    string notes
+    timestamptz createdAt
+    timestamptz updatedAt
+  }
+
+  AVAILABILITY {
+    uuid id PK
+    uuid professionalId FK
+    date day
+    bool isBlocked
+    string note
+  }
+```
+
+> **MVP** usa apenas **SERVICE** e **APPOINTMENT** (com `name/phone` embutidos no Appointment em vez de `CLIENT`), e aplica **TTL** no cliente.
+
+---
+
+# 4) Esquemas prontos (para implementação)
+
+## 4.1 JSON (MVP — localStorage)
+
+```json
+{
+  "services": [
+    { "id": "basic", "name": "Esmaltação", "durationMin": 45, "price": 0, "active": true },
+    { "id": "gel",   "name": "Unha em Gel", "durationMin": 90, "price": 0, "active": true }
+  ],
+  "appointments": [
+    {
+      "id": "e8c2d8b2-3f7c-47f2-8e8a-5c7f8f1c1a01",
+      "name": "Maria Silva",
+      "phone": "+5599999999999",
+      "serviceId": "gel",
+      "startsAt": "2025-08-20T14:00:00",
+      "notes": "Prefere nude.",
+      "status": "scheduled",
+      "createdAt": "2025-08-17T21:15:00",
+      "version": 1
+    }
+  ]
+}
+```
+
+## 4.2 Zod (MVP — validação)
+
+* `phone`: regex E.164 simples `^\+?[1-9]\d{7,14}$` (tolerante; sanitizar antes).
+* `startsAt`: `isAfter(now)`;
+* `status`: union estrita;
+* `serviceId`: existir na lista `services`.
+
+## 4.3 Regras de sobreposição (determinísticas)
+
+Para cada novo `Appointment` com `(startsAt, durationMin)`:
+
+* `endsAt = addMinutes(startsAt, durationMin)`
+* conflito se existir outro `Appointment` com `status ∈ {scheduled, confirmed}` e intervalo que **intersecta**:
+
+  * `a.startsAt < b.endsAt` **e** `b.startsAt < a.endsAt`.
+
+---
+
+# 5) DDL (Pro — Postgres/Supabase) *(não necessário no MVP; pronto para escalar)*
+
+```sql
+create type appointment_status as enum ('scheduled','confirmed','done','canceled');
+
+create table professional (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text
+);
+
+create table service (
+  id uuid primary key default gen_random_uuid(),
+  professional_id uuid not null references professional(id) on delete cascade,
+  name text not null,
+  duration_min int not null check (duration_min between 5 and 480),
+  price_cents int default 0 check (price_cents >= 0),
+  active boolean not null default true
+);
+
+create table client (
+  id uuid primary key default gen_random_uuid(),
+  professional_id uuid not null references professional(id) on delete cascade,
+  name text not null,
+  phone text not null,
+  created_at timestamptz not null default now(),
+  unique (professional_id, phone)
+);
+
+create table appointment (
+  id uuid primary key default gen_random_uuid(),
+  professional_id uuid not null references professional(id) on delete cascade,
+  client_id uuid not null references client(id) on delete restrict,
+  service_id uuid not null references service(id) on delete restrict,
+  starts_at timestamptz not null,
+  ends_at   timestamptz not null,
+  status appointment_status not null default 'scheduled',
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (ends_at > starts_at)
+);
+
+-- índices para consultas principais
+create index on appointment (professional_id, starts_at);
+create index on appointment (client_id);
+```
+
+> Regra de **não sobreposição**: aplicar via **constraint deferrable** ou **trigger** (checagem do intervalo) quando/SE migrar para Pro.
+
+---
+
+# 6) Conclusão
+
+* **MVP**: duas entidades efetivas (**Service**, **Appointment**) com **TTL** e validações simples garantem o objetivo: **visualizar e confirmar**.
+* **Pro**: acrescenta **Professional**, **Client** e **Availability** sem quebrar o modelo; migração é mecânica.
+
+---
+
