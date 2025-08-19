@@ -1,4 +1,5 @@
 'use client'
+import { getSlotsForDate } from "@/lib/timeSlots";
 import { useEffect, useState } from 'react'
 import CalendarMonthly from '@/components/CalendarMonthly'
 import HeroLogo from '@/components/HeroLogo'
@@ -6,7 +7,7 @@ import Link from 'next/link'
 
 /** Tipos compatíveis com legado (string) e novo formato (objeto com nome/serviço) */
 type SlotItem = string | { time: string; name?: string; service?: string }
-type SlotsMap = Record<string, SlotItem[]> // { '2025-08-17': ['18:30'] } ou [{ time:'18:30', name:'Ana' }]
+type SlotsMap = Record<string, SlotItem[]> // { '2025-08-17': ['18:00'] } ou [{ time:'18:00', name:'Ana' }]
 type LastView = { year: number; month: number }
 
 const MARK_KEY    = 'nails.v1.markedDays'
@@ -49,13 +50,13 @@ function isWeekday(date: Date) {
 }
 
 /**
- * Regras de funcionamento:
- * - Seg–Sex: apenas 18:30 (e no máximo 1 atendimento no dia)
- * - Sáb–Dom: agenda aberta (08:00–20:00, passo 60min)
+ * Regras de funcionamento — ATUALIZADAS:
+ * - Seg–Sex: apenas 18:00 (e no máximo 1 atendimento no dia)
+ * - Sáb–Dom: 08:00–18:00 (passo 60min)
  */
 function generateAllowedSlots(date: Date): string[] {
-  if (isWeekday(date)) return ['18:30']
-    return rangeSlots(8*60, 20*60)
+  // Delegamos ao util central (fonte única da verdade)
+  return getSlotsForDate(date)
 }
 
 // ---------- persistência ----------
@@ -104,12 +105,12 @@ function LegendCompact(){
 
     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
     <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-indigo-300"></span>
-    Dia útil → único horário <strong className="font-semibold text-white">18:30</strong>
+    Dia útil → único horário <strong className="font-semibold text-white">18:00</strong>
     </span>
 
     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
     <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-emerald-300"></span>
-    Fim de semana → horários variados
+    Fim de semana → 08:00–18:00 (em hora cheia)
     </span>
 
     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
@@ -231,22 +232,22 @@ export default function Page(){
       {selectedDay && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
-        Regra do dia: {isWeekday(selectedDay) ? 'dia útil → único 18:30' : 'fim de semana → horários variados'}
+        Regra do dia: {isWeekday(selectedDay) ? 'dia útil → único 18:00' : 'fim de semana → 08:00–18:00'}
         </span>
 
         {isWeekday(selectedDay) ? (
           selectedSlots.length >= 1 ? (
             <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
-            Disponibilidade: <strong>indisponível</strong> (18:30 tomado)
+            Disponibilidade: <strong>indisponível</strong> (18:00 tomado)
             </span>
           ) : (
             <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
-            Disponibilidade: <strong>livre às 18:30</strong>
+            Disponibilidade: <strong>livre às 18:00</strong>
             </span>
           )
         ) : (
           <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
-          Disponibilidade: <strong>variável</strong> (consulte os horários)
+          Disponibilidade: <strong>08:00–18:00</strong>
           </span>
         )}
         </div>
@@ -317,8 +318,8 @@ function QuickDialog({
           if(!time) return alert('Escolha o horário.')
 
             if (isWeekday(date)) {
-              if (time !== '18:30') return alert('Em dias úteis, o único horário disponível é 18:30.')
-                if (taken.length >= 1) return alert('Este dia útil já possui o único atendimento de 18:30 reservado.')
+              if (time !== '18:00') return alert('Em dias úteis, o único horário disponível é 18:00.')
+                if (taken.length >= 1) return alert('Este dia útil já possui o único atendimento de 18:00 reservado.')
             }
             if (taken.includes(time)) return alert('Este horário já está reservado. Escolha outro.')
 
@@ -384,7 +385,7 @@ function QuickDialog({
 
       {weekdayFull && (
         <div className="mb-3 rounded-lg border border-white/10 bg-[#0e1114] sm:bg-white/5 p-2 text-sm text-rose-300" role="alert">
-        Este dia útil já está indisponível (o único horário 18:30 foi reservado).
+        Este dia útil já está indisponível (o único horário 18:00 foi reservado).
         </div>
       )}
 
@@ -394,7 +395,7 @@ function QuickDialog({
       aria-label="Horários disponíveis"
       >
       {allowed.map(hhmm=>{
-        const isTaken = taken.includes(hhmm) || (weekdayFull && hhmm === '18:30')
+        const isTaken = taken.includes(hhmm) || (weekdayFull && hhmm === '18:00')
         const isSelected = time === hhmm
         return (
           <button
@@ -423,7 +424,7 @@ function QuickDialog({
 
       <div className="modal-section-divider mt-3 pt-3">
       <p className="text-xs text-white/60 mb-3">
-      Dias úteis: apenas 18:30 (1 atendimento/dia). Fins de semana: 08:00–20:00.
+      Dias úteis: apenas <strong>18:00</strong> (1 atendimento/dia). Fins de semana: <strong>08:00–18:00</strong>.
       </p>
       <button className="btn btn-primary w-full py-3 text-base" onClick={send} disabled={weekdayFull}>
       Enviar para Vânia pelo WhatsApp

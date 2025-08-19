@@ -106,8 +106,8 @@ export default function CalendarMonthly({
                 const isWeekday = dow >= 1 && dow <= 5;
                 const isWeekend = !isWeekday;
 
-                const weekdayFull = isWeekday && takenCount >= 1;   // 18:30 tomado
-                const weekdayFree = isWeekday && takenCount === 0;  // 18:30 livre
+                const weekdayFull = isWeekday && takenCount >= 1;   // 18:00 tomado
+                const weekdayFree = isWeekday && takenCount === 0;  // 18:00 livre
                 const weekendFree = isWeekend && takenCount === 0;  // FDS sem reservas
 
                 // verde só em dias FUTUROS e livres
@@ -193,10 +193,10 @@ function Legend() {
     return (
         <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-        Dia útil → único horário <strong>18:30</strong>
+        Dia útil → único horário <strong>18:00</strong>
         </span>
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-        Fim de semana → horários variados
+        Fins de semana → <strong>08:00–18:00</strong> (de hora em hora)
         </span>
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
         Borda verde = dia livre (futuro)
@@ -304,19 +304,47 @@ function buildAria(
 
     if (isToday) pieces.push("(hoje)");
 
+    // Texto coerente com a regra aplicada
     pieces.push(
-        isWeekday ? "dia útil: único horário 18:30" : "fim de semana: horários variados"
+        isWeekday
+        ? "dia útil: único horário às 18:00"
+        : "fim de semana: horários de 08:00 até 18:00"
     );
 
     if (isDisabled) {
         pieces.push("(indisponível)");
     } else {
         if (isWeekday && takenCount >= 1) {
-            pieces.push("(indisponível — 18:30 já reservado)");
+            pieces.push("(indisponível — 18:00 já reservado)");
         } else {
             pieces.push(takenCount > 0 ? `${takenCount} reserva(s)` : "sem reservas");
         }
     }
 
     return pieces.join(", ");
+}
+
+/**
+ * ─────────────────────────────────────────────────────────────
+ * Utilitário de horários para integração com a tela de slots
+ * Regra: Dias úteis → único slot "18:00"
+ *        Finais de semana → slots de 1h de 08:00 até 18:00 (inclusive)
+ * ─────────────────────────────────────────────────────────────
+ */
+export function getDaySlots(date: Date): string[] {
+    const dow = date.getDay(); // 0=Dom, 6=Sáb
+    const isWeekday = dow >= 1 && dow <= 5;
+
+    if (isWeekday) {
+        return ["18:00"];
+    }
+
+    // Fim de semana: de 08:00 até 18:00, passo de 1h (inclusive)
+    const slots: string[] = [];
+    const startHour = 8;
+    const endHour = 18;
+    for (let h = startHour; h <= endHour; h++) {
+        slots.push(`${String(h).padStart(2, "0")}:00`);
+    }
+    return slots;
 }
