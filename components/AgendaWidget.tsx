@@ -207,7 +207,7 @@ export function AgendaWidget({
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="px-3 py-2 rounded-md bg-black/30 border border-white/10 outline-none focus:ring-2 focus:ring-white/20"
-            placeholder="Ex.: Ana"
+            placeholder="Ex.: Maria"
             aria-label="Seu nome"
           />
         </label>

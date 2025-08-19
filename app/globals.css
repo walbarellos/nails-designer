@@ -2,86 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+/* ===== Base ===== */
+@layer base {
+    :root { color-scheme: dark; }
+    html, body { height: 100%; }
+    body { @apply antialiased; }
+}
 
-html, body { height: 100%; }
-body { @apply bg-panel text-ink antialiased; }
+/* ===== Layout util ===== */
+@layer components {
+    .container-max { @apply max-w-5xl mx-auto px-4; }
 
-.container-max { @apply max-w-5xl mx-auto px-4; }
-.card { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg; }
-.btn { @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border border-white/10 bg-white/10 hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-indigo-500; }
-.btn-primary { @apply bg-indigo-600 hover:bg-indigo-500 border-transparent; }
-.input { @apply w-full rounded-lg border border-white/10 bg-panel2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
-.label { @apply block text-sm mb-1 text-white/70; }
-.badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]; }
+    /* ===== UI tokens ===== */
+    .card { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg; }
 
-/* Legend & chips (visuais leves) */
+    .btn {
+        @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium
+        border border-white/10 bg-white/10 hover:bg-white/20
+        focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    }
+
+    .btn-primary { @apply bg-indigo-600 hover:bg-indigo-500 border-transparent; }
+
+    /* Substituição do bg-panel2 por utilitário nativo seguro */
+    .input {
+        @apply w-full rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm
+        focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    }
+
+    .label { @apply block text-sm mb-1 text-white/70; }
+
+    .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]; }
+}
+
+/* ===== Legend & chips ===== */
 .chips { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
-.chip  { border:1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05);
-    border-radius: 9999px; padding:.25rem .5rem; font-size:.75rem; }
+.chip  { border:1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); border-radius: 9999px; padding:.25rem .5rem; font-size:.75rem; }
 
-    /* Fallback seguro para quebras de linha (evita warnings de text-wrap) */
-    .footer-jogo .creditos,
+/* Quebra de linha segura (evita warnings de text-wrap) */
+.footer-jogo .creditos,
 .creditos,
 .legend, .calendar-legend, .cal-legend,
-.card {
-    overflow-wrap: anywhere;
-    word-break: normal;
-}
+.card { overflow-wrap:anywhere; word-break:normal; }
 
-/* Se o CalendarMonthly antigo tiver legenda própria, esconda */
-.calendar-legend, .cal-legend, .legend { display: none !important; }
+/* Oculta possíveis legendas antigas do calendário */
+.calendar-legend, .cal-legend, .legend { display:none !important; }
 
-/* Dia indisponível (lotado) → X vermelho no canto */
-.day-full {
-    position: relative;
-    color: #888; /* texto apagado */
-}
+/* ===== Calendário: estados ===== */
+/* Lotado → X vermelho */
+.day-full { position:relative; color:#888; }
 .day-full::after {
-    content: "✕";
-    color: #e53935; /* vermelho vivo */
-    font-size: 0.9rem;
-    font-weight: bold;
-    position: absolute;
-    top: 4px;
-    right: 6px;
+    content:"✕";
+    color:#e53935;
+    font-size:.9rem;
+    font-weight:bold;
+    position:absolute; top:4px; right:6px;
 }
 
-/* Dia disponível em dias úteis (18h30 livre) */
+/* Disponível (borda verde) */
 .day-available {
-    border: 2px solid #00c853; /* verde institucional */
-    border-radius: 0.75rem;     /* arredondado igual card */
-    color: #fff;
+    border:2px solid #00c853;      /* verde institucional */
+    border-radius:.75rem;
+    color:#fff;
 }
-
-/* Hover em dias clicáveis */
 .day-available:hover {
-    background: rgba(0, 200, 83, 0.12);
-    cursor: pointer;
-    transform: scale(1.02);
-    transition: all 0.15s ease-in-out;
+    background:rgba(0,100,83,.12);
+    cursor:pointer; transform:scale(1.02);
+    transition:transform .15s ease, background-color .15s ease;
 }
 
-/* ===== Modal look & feel ===== */
+/* Respeita preferências do usuário */
+@media (prefers-reduced-motion: reduce) {
+    .day-available:hover { transform:none; }
+}
+
+/* ===== Modal ===== */
 .modal-overlay {
-    background: rgba(0,0,0,.100);
-    backdrop-filter: blur(50px) saturate(140%);
-    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    background:rgba(0,0,0,.55);
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
 }
 
-/* Painel sólido do modal — SEM transparência */
 .modal-panel {
-    border-radius: 1rem; /* arredondado */
-    background: linear-gradient(180deg, #14171d 0%, #0f1217 100%); /* sólido e elegante */
-    border: 1px solid rgba(255,255,255,.08);
-    box-shadow:
-    0 10px 30px rgba(0,0,0,.45),
-    inset 0 1px 0 rgba(255,255,255,.03);
-    color: #f5f7fa; /* texto claro */
+    border-radius:1rem;
+    background:linear-gradient(180deg, #14171d 0%, #0f1217 100%);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
+    color:#f5f7fa;
 }
 
+.modal-section-divider { border-top:1px solid rgba(255,255,255,.06); }
 
-/* header/footer mais legíveis */
-.modal-section-divider {
-    border-top: 1px solid rgba(255,255,255,.06);
-}
+/* ===== Tipografia util ===== */
+.h-text     { letter-spacing:-0.01em; }
+.subtle     { color:rgba(255,255,255,.65); }
+.muted      { color:rgba(255,255,255,.5); }
+.card-title { font-weight:700; letter-spacing:-0.015em; }
+.time-nums  { font-variant-numeric: tabular-nums; }

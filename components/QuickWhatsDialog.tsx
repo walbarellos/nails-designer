@@ -137,7 +137,7 @@ function QuickDialog({
       Dias úteis: apenas 18:30 (1 atendimento/dia). Fins de semana: 08:00–20:00.
       </p>
       <button className="btn btn-primary w-full py-3 text-base" onClick={send} disabled={weekdayFull}>
-      Enviar para Vânia pelo WhatsApp
+      Confirmar Agendamento via WhatsApp
       </button>
       </div>
       </div>

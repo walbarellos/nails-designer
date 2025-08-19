@@ -1,74 +1,73 @@
 // app/layout.tsx
-import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
-import Script from "next/script";
-import { Inter } from "next/font/google";
-import "./globals.css";
+import type { Metadata, Viewport } from 'next'
+import type { ReactNode } from 'react'
+import Script from 'next/script'
+import { Inter } from 'next/font/google'
+import './globals.css'
 
 const inter = Inter({
-    subsets: ["latin"],
-    display: "swap",
-    variable: "--font-sans",
-});
+    subsets: ['latin'],
+    display: 'swap',
+    variable: '--font-sans',
+})
 
 export const viewport: Viewport = {
-    width: "device-width",
+    width: 'device-width',
     initialScale: 1,
     maximumScale: 1,
-    viewportFit: "cover",
+    viewportFit: 'cover',
     themeColor: [
-        { media: "(prefers-color-scheme: dark)", color: "#0f1215" },
-        { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+        { media: '(prefers-color-scheme: dark)', color: '#0f1215' },
+        { media: '(prefers-color-scheme: light)', color: '#ffffff' },
     ],
-};
+}
 
 const metadataBase =
 process.env.NEXT_PUBLIC_SITE_URL
 ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
 : process.env.VERCEL_URL
 ? new URL(`https://${process.env.VERCEL_URL}`)
-: new URL("http://localhost:3000");
+: new URL('http://localhost:3000')
 
 export const metadata: Metadata = {
-    metadataBase, // ✅ resolve URLs absolutas (OG/Twitter/etc.)
+    metadataBase,
     title: {
-        default: "Agenda — Vânia Maria",
-            template: "%s · Agenda — Vânia Maria",
+        default: 'Agenda — Vânia Maria',
+            template: '%s · Agenda — Vânia Maria',
     },
     description:
-    "Agenda simples e auditável para confirmação de horários (30 dias) com envio por WhatsApp.",
-    applicationName: "Agenda Vânia Maria",
+    'Agenda simples e auditável para confirmação de horários (30 dias) com envio por WhatsApp.',
+    applicationName: 'Agenda Vânia Maria',
     icons: {
         icon: [
-            { url: "/favicon.ico" },
-            { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-            { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+            { url: '/favicon.ico' },
+            { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
         ],
-        apple: [{ url: "/icons/icon-192.png" }],
+        apple: [{ url: '/icons/icon-192.png' }],
     },
-    manifest: "/manifest.webmanifest",
-    // ❌ NÃO declare themeColor aqui (já está no viewport)
+    manifest: '/manifest.webmanifest',
     openGraph: {
-        title: "Agenda — Vânia Maria",
+        title: 'Agenda — Vânia Maria',
         description:
-        "Confirmação de agendamentos com horário e protocolo. Simples, claro e confiável.",
-        images: [{ url: "/icons/icon-512.png", width: 512, height: 512 }],
-        type: "website",
+        'Confirmação de agendamentos com horário e protocolo. Simples, claro e confiável.',
+        images: [{ url: '/icons/icon-512.png', width: 512, height: 512 }],
+        type: 'website',
     },
     twitter: {
-        card: "summary",
-        title: "Agenda — Vânia Maria",
+        card: 'summary',
+        title: 'Agenda — Vânia Maria',
         description:
-        "Confirmação de agendamentos com horário e protocolo. Simples, claro e confiável.",
-        images: ["/icons/icon-512.png"],
+        'Confirmação de agendamentos com horário e protocolo. Simples, claro e confiável.',
+        images: ['/icons/icon-512.png'],
     },
     robots: { index: true, follow: true },
     other: {
-        "apple-mobile-web-app-capable": "yes",
-        "apple-mobile-web-app-status-bar-style": "black-translucent",
-        "format-detection": "telephone=no, email=no, address=no",
+        'apple-mobile-web-app-capable': 'yes',
+        'apple-mobile-web-app-status-bar-style': 'black-translucent',
+        'format-detection': 'telephone=no, email=no, address=no',
     },
-};
+}
 
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
@@ -76,27 +75,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <body
         className={[
             inter.variable,
-            "font-sans",
-            "bg-[#0f1215] text-white antialiased",
-            "min-h-screen",
-            "selection:bg-white/10 selection:text-white",
-            "scroll-smooth",
-            // layout em coluna para colar o footer ao fim do app
-            "flex flex-col",
-        ].join(" ")}
+            'font-sans',
+            'bg-[#0f1215] text-white antialiased',
+            'min-h-screen',
+            'selection:bg-white/10 selection:text-white',
+            'scroll-smooth',
+            'flex flex-col',
+        ].join(' ')}
         >
-        <main className="flex-1">
-        {children}
-        </main>
+        <main className="flex-1">{children}</main>
 
-        {/* Footer discreto com crédito (sem competir com a marca do app) */}
         <footer
         className="px-4 py-3 text-center text-xs text-zinc-500/90"
         aria-label="Créditos do sistema"
         >
         <span className="sr-only">Créditos:</span>
         <span className="opacity-90">
-        Feito por{" "}
+        Engenharia e Sistemas {' '}
         <a
         href="https://github.com/walbarellos"
         target="_blank"
@@ -115,5 +110,5 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </Script>
         </body>
         </html>
-    );
+    )
 }

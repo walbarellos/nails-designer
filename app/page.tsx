@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import CalendarMonthly from '@/components/CalendarMonthly'
 import HeroLogo from '@/components/HeroLogo'
+import Link from 'next/link'
 
 function sortHHMM(arr: string[]) {
   return [...arr].sort((a,b)=> a.localeCompare(b))
@@ -109,7 +110,10 @@ export default function Page(){
   // persiste last view sempre que mudar
   useEffect(() => { saveLastView({ year, month }) }, [year, month])
 
-  function onNextMonth(){ const d=new Date(year,month+1,1); setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null) }
+  function onNextMonth(){
+    const d=new Date(year,month+1,1)
+    setYear(d.getFullYear()); setMonth(d.getMonth()); setSelectedDay(null)
+  }
   function onSelectDay(d:Date|null){
     if(!d) return
       if(startOfDay(d)<startOfToday()) return
@@ -149,6 +153,7 @@ export default function Page(){
     <p className="text-sm text-white/60">Selecione um dia futuro, escolha o horário e confirme pelo WhatsApp.</p>
     </div>
     <div className="ml-auto flex items-center gap-2">
+    <Link href="/admin" className="btn">Painel Admin</Link>
     <button className="btn" onClick={onNextMonth}>Próximo mês</button>
     </div>
     </div>
@@ -164,7 +169,7 @@ export default function Page(){
     markedDays={markedDays}
     minDate={startOfToday()}
     slotsByDay={slotsByDay}
-    showLegend={false}   // <<< evita duplicar
+    showLegend={false}   // evita duplicar
     />
     </section>
 
@@ -180,7 +185,7 @@ export default function Page(){
       {selectedDay && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
-        Regra do dia: {isWeekday(selectedDay) ? "dia útil → único 18:30" : "fim de semana → horários variados"}
+        Regra do dia: {isWeekday(selectedDay) ? 'dia útil → único 18:30' : 'fim de semana → horários variados'}
         </span>
 
         {isWeekday(selectedDay) ? (
@@ -236,7 +241,6 @@ export default function Page(){
   )
 }
 
-// ---------- diálogo ----------
 // ---------- diálogo ----------
 function QuickDialog({
   open, onClose, date, taken, allowed
