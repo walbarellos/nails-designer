@@ -4,17 +4,19 @@ import CalendarMonthly from '@/components/CalendarMonthly'
 import HeroLogo from '@/components/HeroLogo'
 import Link from 'next/link'
 
-function sortHHMM(arr: string[]) {
-  return [...arr].sort((a,b)=> a.localeCompare(b))
-}
+/** Tipos compatíveis com legado (string) e novo formato (objeto com nome/serviço) */
+type SlotItem = string | { time: string; name?: string; service?: string }
+type SlotsMap = Record<string, SlotItem[]> // { '2025-08-17': ['18:30'] } ou [{ time:'18:30', name:'Ana' }]
+type LastView = { year: number; month: number }
 
-const MARK_KEY   = 'nails.v1.markedDays'
-const LAST_KEY   = 'nails.v1.lastView'
-const SLOTS_KEY  = 'nails.v1.slots'
+const MARK_KEY    = 'nails.v1.markedDays'
+const LAST_KEY    = 'nails.v1.lastView'
+const SLOTS_KEY   = 'nails.v1.slots'
 const VANIA_PHONE = '+556884257558' // manter com +; convertemos para dígitos no link
 
-type LastView = { year: number; month: number }
-type SlotsMap = Record<string, string[]> // { '2025-08-17': ['18:30','19:30'] }
+function sortHHMM(arr: string[]) {
+  return [...arr].sort((a, b) => a.localeCompare(b))
+}
 
 // ---------- utils ----------
 function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d }
@@ -49,38 +51,68 @@ function isWeekday(date: Date) {
 /**
  * Regras de funcionamento:
  * - Seg–Sex: apenas 18:30 (e no máximo 1 atendimento no dia)
- * - Sáb–Dom: agenda aberta (aqui configurada para 08:00–20:00, passo 60min)
+ * - Sáb–Dom: agenda aberta (08:00–20:00, passo 60min)
  */
 function generateAllowedSlots(date: Date): string[] {
   if (isWeekday(date)) return ['18:30']
-    // fds (ajuste facilmente este range se desejar outro)
     return rangeSlots(8*60, 20*60)
 }
 
 // ---------- persistência ----------
-function loadMarked():Set<string>{ try{ const raw=localStorage.getItem(MARK_KEY); return raw? new Set(JSON.parse(raw)): new Set() }catch{ return new Set() } }
-function saveMarked(set:Set<string>){ try{ localStorage.setItem(MARK_KEY, JSON.stringify(Array.from(set))) }catch{} }
-function loadLastView():LastView|null{ try{ return JSON.parse(localStorage.getItem(LAST_KEY)||'null') }catch{ return null } }
-function saveLastView(v:LastView){ try{ localStorage.setItem(LAST_KEY, JSON.stringify(v)) }catch{} }
-function loadSlots():SlotsMap{ try{ return JSON.parse(localStorage.getItem(SLOTS_KEY)||'{}') }catch{ return {} } }
-function saveSlots(m:SlotsMap){ try{ localStorage.setItem(SLOTS_KEY, JSON.stringify(m)) }catch{} }
+function loadMarked():Set<string>{
+  try{ const raw=localStorage.getItem(MARK_KEY); return raw? new Set(JSON.parse(raw)): new Set() }catch{ return new Set() }
+}
+function saveMarked(set:Set<string>){
+  try{ localStorage.setItem(MARK_KEY, JSON.stringify(Array.from(set))) }catch{}
+}
+function loadLastView():LastView|null{
+  try{ return JSON.parse(localStorage.getItem(LAST_KEY)||'null') }catch{ return null }
+}
+function saveLastView(v:LastView){
+  try{ localStorage.setItem(LAST_KEY, JSON.stringify(v)) }catch{}
+}
+function loadSlots():SlotsMap{
+  try{ return JSON.parse(localStorage.getItem(SLOTS_KEY)||'{}') }catch{ return {} }
+}
+function saveSlots(m:SlotsMap){
+  try{ localStorage.setItem(SLOTS_KEY, JSON.stringify(m)) }catch{}
+}
+
+// ---------- helpers p/ novo formato ----------
+/** extrai o "time" de um SlotItem */
+function slotTime(s: SlotItem){ return typeof s === 'string' ? s : s.time }
+/** retorna uma cópia do dia com dedup por horário (preserva nome/serviço quando disponíveis) */
+function dedupDay(items: SlotItem[]): { time: string; name?: string; service?: string }[] {
+  const map = new Map<string, { time: string; name?: string; service?: string }>()
+  for (const it of items) {
+    const t = slotTime(it)
+    const curr = map.get(t)
+    if (typeof it === 'string') {
+      if (!curr) map.set(t, { time: t })
+    } else {
+      if (!curr) map.set(t, { time: t, name: it.name, service: it.service })
+        else map.set(t, { time: t, name: it.name ?? curr.name, service: it.service ?? curr.service })
+    }
+  }
+  return [...map.values()].sort((a,b)=>a.time.localeCompare(b.time))
+}
 
 function LegendCompact(){
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
     <span className="mr-1 opacity-80">Legenda:</span>
 
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
     <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-indigo-300"></span>
     Dia útil → único horário <strong className="font-semibold text-white">18:30</strong>
     </span>
 
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
     <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-emerald-300"></span>
     Fim de semana → horários variados
     </span>
 
-    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
     <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-rose-400"></span>
     Círculo vermelho = nº de reservas do dia
     </span>
@@ -127,21 +159,35 @@ export default function Page(){
       const next=new Set(prev); next.add(key); saveMarked(next); return next
     })
   }
-  function addSlot(date:Date, hhmm:string){
+
+  /** Salva o slot no formato novo (objeto) mantendo compatibilidade */
+  function addSlot(date:Date, hhmm:string, name?:string, service?:string){
     const day=yyyymmdd(date)
     setSlots(prev=>{
-      const next:{[k:string]:string[]} = { ...prev }
-      const arr = new Set([...(next[day]||[]), hhmm])
-      next[day] = sortHHMM(Array.from(arr))
+      const next: SlotsMap = { ...prev }
+      const arr = next[day] ? [...next[day]] : []
+      // insere/atualiza
+      const idx = arr.findIndex(s => slotTime(s) === hhmm)
+      const obj = { time: hhmm, ...(name ? {name} : {}), ...(service ? {service} : {}) }
+      if (idx >= 0) {
+        const curr = arr[idx]
+        if (typeof curr === 'string') arr[idx] = obj
+          else arr[idx] = { time: hhmm, name: name ?? curr.name, service: service ?? curr.service }
+      } else {
+        arr.push(obj)
+      }
+      next[day] = dedupDay(arr)
       saveSlots(next)
       return next
     })
   }
 
   // contagem por dia para o calendário
-  const slotsByDay = Object.fromEntries(Object.entries(slots).map(([d,arr])=>[d, arr.length]))
+  const slotsByDay = Object.fromEntries(
+    Object.entries(slots).map(([d,arr])=>[d, dedupDay(arr).length])
+  )
   const selectedKey = selectedDay ? yyyymmdd(selectedDay) : null
-  const selectedSlots = selectedKey ? sortHHMM(slots[selectedKey] || []) : []
+  const selectedSlots = selectedKey ? dedupDay(slots[selectedKey] || []).map(s => s.time) : []
 
   return (
     <main className="container-max py-6 space-y-6">
@@ -184,22 +230,22 @@ export default function Page(){
       </h3>
       {selectedDay && (
         <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+        <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
         Regra do dia: {isWeekday(selectedDay) ? 'dia útil → único 18:30' : 'fim de semana → horários variados'}
         </span>
 
         {isWeekday(selectedDay) ? (
           selectedSlots.length >= 1 ? (
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+            <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
             Disponibilidade: <strong>indisponível</strong> (18:30 tomado)
             </span>
           ) : (
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+            <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
             Disponibilidade: <strong>livre às 18:30</strong>
             </span>
           )
         ) : (
-          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+          <span className="rounded-full border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1">
           Disponibilidade: <strong>variável</strong> (consulte os horários)
           </span>
         )}
@@ -212,7 +258,7 @@ export default function Page(){
         {selectedSlots.map(h => (
           <li
           key={h}
-          className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm"
+          className="rounded-lg border border-white/10 bg-[#0e1114] sm:bg-white/5 px-2 py-1 text-sm"
           aria-label={`Horário reservado ${ptTime(h)}`}
           >
           {h}
@@ -229,11 +275,11 @@ export default function Page(){
     date={selectedDay}
     taken={selectedSlots}
     allowed={allowedSlots}
-    onClose={(sent, hhmm)=>{
+    onClose={(sent, sel)=>{
       setOpen(false);
-      if(sent && selectedDay && hhmm){
+      if(sent && selectedDay && sel){
         markDay(selectedDay);
-        addSlot(selectedDay, hhmm);
+        addSlot(selectedDay, sel.time, sel.name, sel.service);
       }
     }}
     />
@@ -246,7 +292,7 @@ function QuickDialog({
   open, onClose, date, taken, allowed
 }:{
   open:boolean
-  onClose:(sent:boolean, hhmm?:string)=>void
+  onClose:(sent:boolean, sel?: { time:string; name?:string; service?:string })=>void
   date:Date|null
   taken:string[]
   allowed:string[]
@@ -284,7 +330,7 @@ function QuickDialog({
               const url = `https://wa.me/${e164Digits}?text=${encodeURIComponent(msg)}`
               window.open(url,'_blank','noopener,noreferrer')
 
-              onClose(true, time)
+              onClose(true, { time, name: clientName.trim(), service })
     }
 
     const weekdayFull = isWeekday(date) && taken.length >= 1
@@ -337,7 +383,7 @@ function QuickDialog({
       </div>
 
       {weekdayFull && (
-        <div className="mb-3 rounded-lg border border-white/10 bg-white/5 p-2 text-sm text-rose-300" role="alert">
+        <div className="mb-3 rounded-lg border border-white/10 bg-[#0e1114] sm:bg-white/5 p-2 text-sm text-rose-300" role="alert">
         Este dia útil já está indisponível (o único horário 18:30 foi reservado).
         </div>
       )}
@@ -362,10 +408,10 @@ function QuickDialog({
           className={[
             "rounded-lg px-2 py-2 text-sm border transition",
             isTaken
-            ? "border-white/10 bg-white/5 text-white/40 cursor-not-allowed"
+            ? "border-white/10 bg-[#111316] sm:bg-white/5 text-white/40 cursor-not-allowed"
             : (isSelected
             ? "border-emerald-400 bg-emerald-500/20 text-emerald-100"
-            : "border-white/10 bg-white/5 hover:bg-white/10"),
+            : "border-white/10 bg-[#0e1114] sm:bg-white/5 hover:bg-white/10"),
           ].join(' ')}
           title={isTaken ? "Já reservado" : "Disponível"}
           >

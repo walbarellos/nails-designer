@@ -318,7 +318,8 @@ export default function AdminPage() {
   // ===== UI =====
   return (
     <main className="min-h-[100dvh] grid place-items-center bg-gradient-to-b from-[#0f1215] to-[#060708] text-[#e6e8ea] p-4">
-    <section className="w-[min(980px,96vw)] rounded-2xl border border-[#202428] bg-[#0c0e10]/90 shadow-[0_40px_160px_rgba(0,0,0,.55),inset_0_0_0_1px_rgba(255,255,255,.03)] p-4">
+    <section className="w-[min(980px,96vw)] rounded-2xl border border-[#202428] bg-[#0c0e10] sm:bg-[#0c0e10]/90 shadow-[0_40px_160px_rgba(0,0,0,.55),inset_0_0_0_1px_rgba(255,255,255,.03)] p-4">
+
     {/* NAV */}
     <nav className="mb-3 flex flex-wrap items-center justify-between gap-2">
     <button
