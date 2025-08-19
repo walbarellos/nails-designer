@@ -64,6 +64,29 @@ function saveLastView(v:LastView){ try{ localStorage.setItem(LAST_KEY, JSON.stri
 function loadSlots():SlotsMap{ try{ return JSON.parse(localStorage.getItem(SLOTS_KEY)||'{}') }catch{ return {} } }
 function saveSlots(m:SlotsMap){ try{ localStorage.setItem(SLOTS_KEY, JSON.stringify(m)) }catch{} }
 
+function LegendCompact(){
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
+    <span className="mr-1 opacity-80">Legenda:</span>
+
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-indigo-300"></span>
+    Dia útil → único horário <strong className="font-semibold text-white">18:30</strong>
+    </span>
+
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-emerald-300"></span>
+    Fim de semana → horários variados
+    </span>
+
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,.05)]">
+    <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-rose-400"></span>
+    Círculo vermelho = nº de reservas do dia
+    </span>
+    </div>
+  );
+}
+
 // ---------- página ----------
 export default function Page(){
   const now = new Date()
@@ -132,6 +155,7 @@ export default function Page(){
     </header>
 
     <section className="card p-4 sm:p-5">
+    <LegendCompact />
     <CalendarMonthly
     year={year}
     month={month}
@@ -140,6 +164,7 @@ export default function Page(){
     markedDays={markedDays}
     minDate={startOfToday()}
     slotsByDay={slotsByDay}
+    showLegend={false}   // <<< evita duplicar
     />
     </section>
 
@@ -152,6 +177,29 @@ export default function Page(){
       <h3 className="text-base font-semibold mb-2">
       {ptDate(selectedDay)} — {selectedSlots.length || 0} horário(s) reservado(s)
       </h3>
+      {selectedDay && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+        Regra do dia: {isWeekday(selectedDay) ? "dia útil → único 18:30" : "fim de semana → horários variados"}
+        </span>
+
+        {isWeekday(selectedDay) ? (
+          selectedSlots.length >= 1 ? (
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+            Disponibilidade: <strong>indisponível</strong> (18:30 tomado)
+            </span>
+          ) : (
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+            Disponibilidade: <strong>livre às 18:30</strong>
+            </span>
+          )
+        ) : (
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1">
+          Disponibilidade: <strong>variável</strong> (consulte os horários)
+          </span>
+        )}
+        </div>
+      )}
       {selectedSlots.length === 0 ? (
         <p className="text-sm text-white/60">Nenhum horário reservado ainda.</p>
       ) : (
@@ -189,6 +237,7 @@ export default function Page(){
 }
 
 // ---------- diálogo ----------
+// ---------- diálogo ----------
 function QuickDialog({
   open, onClose, date, taken, allowed
 }:{
@@ -200,7 +249,7 @@ function QuickDialog({
 }){
   const [clientName,setClientName]=useState('')
   const [service,setService]=useState('Manicure')
-  const [time,setTime]=useState('')          // mantém estado do slot escolhido
+  const [time,setTime]=useState('')
 
   useEffect(()=>{ if(open){ setClientName(''); setService('Manicure'); setTime('') } },[open])
   if(!open||!date) return null
@@ -213,26 +262,21 @@ function QuickDialog({
     }
 
     const send=async()=>{
-      // Regras: nome, serviço e horário obrigatórios
       if(!clientName.trim()) return alert('Informe o seu nome.')
         if(!service.trim()) return alert('Selecione o serviço.')
           if(!time) return alert('Escolha o horário.')
 
-            // Dias úteis: apenas 18:30 e no máximo 1 atendimento no dia
             if (isWeekday(date)) {
               if (time !== '18:30') return alert('Em dias úteis, o único horário disponível é 18:30.')
                 if (taken.length >= 1) return alert('Este dia útil já possui o único atendimento de 18:30 reservado.')
             }
-
-            // Qualquer slot específico não pode estar ocupado
             if (taken.includes(time)) return alert('Este horário já está reservado. Escolha outro.')
 
-              // Mensagem para WhatsApp
               const msg =
               `Olá, Vânia! Gostaria de agendar *${service}* em *${dLabel}* às *${ptTime(time)}*.\n` +
               `Meu nome é *${clientName}*.`
 
-              const e164Digits = digitsOnly(VANIA_PHONE) // remove o '+'
+              const e164Digits = digitsOnly(VANIA_PHONE)
               const url = `https://wa.me/${e164Digits}?text=${encodeURIComponent(msg)}`
               window.open(url,'_blank','noopener,noreferrer')
 
@@ -241,23 +285,24 @@ function QuickDialog({
 
     const weekdayFull = isWeekday(date) && taken.length >= 1
 
-    // <div role="dialog"> no lugar de <dialog>
     return (
       <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 grid place-items-center p-4 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="qd-title"
+      onMouseDown={(e)=>{ if (e.currentTarget===e.target) onClose(false) }}
+      onKeyDown={(e)=>{ if (e.key==='Escape') onClose(false) }}
       >
-      <div className="card w-full max-w-md p-4 sm:p-5" role="document">
-      <header className="mb-3 flex items-center justify-between">
+      {/* painel sólido (sem transparência) */}
+      <div className="w-full max-w-md modal-panel p-5" role="document">
+      <header className="mb-4 flex items-center justify-between">
       <h3 id="qd-title" className="text-lg font-semibold">Confirmar e enviar</h3>
       <button className="btn" onClick={()=>onClose(false)} aria-label="Fechar">Fechar</button>
       </header>
 
       <p className="text-sm text-white/80 mb-3">Dia selecionado: <strong>{dLabel}</strong></p>
 
-      {/* Nome e Serviço (sem celular) */}
       <label className="label" htmlFor="nome">Seu nome</label>
       <input
       id="nome"
@@ -282,7 +327,6 @@ function QuickDialog({
       <option>Combo Mãos + Pés</option>
       </select>
 
-      {/* Grade de horários (1h em 1h) */}
       <div className="mb-2 flex items-center justify-between">
       <label className="label">Horário</label>
       <span className="text-xs text-white/60">toque para selecionar</span>
@@ -295,11 +339,7 @@ function QuickDialog({
       )}
 
       <div
-      className="
-      grid grid-cols-3 gap-2
-      sm:grid-cols-4
-      max-h-56 overflow-auto pr-1
-      "
+      className="grid grid-cols-3 gap-2 sm:grid-cols-4 max-h-56 overflow-auto pr-1"
       role="listbox"
       aria-label="Horários disponíveis"
       >
@@ -331,13 +371,14 @@ function QuickDialog({
       })}
       </div>
 
-      <p className="text-xs text-white/60 mt-2 mb-4">
+      <div className="modal-section-divider mt-3 pt-3">
+      <p className="text-xs text-white/60 mb-3">
       Dias úteis: apenas 18:30 (1 atendimento/dia). Fins de semana: 08:00–20:00.
       </p>
-
       <button className="btn btn-primary w-full py-3 text-base" onClick={send} disabled={weekdayFull}>
       Enviar para Vânia pelo WhatsApp
       </button>
+      </div>
       </div>
       </div>
     )

@@ -2,14 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-    color-scheme: dark;
-}
+:root { color-scheme: dark; }
 
 html, body { height: 100%; }
-body {
-    @apply bg-panel text-ink antialiased;
-}
+body { @apply bg-panel text-ink antialiased; }
 
 .container-max { @apply max-w-5xl mx-auto px-4; }
 .card { @apply rounded-2xl border border-white/10 bg-white/5 shadow-lg; }
@@ -18,3 +14,74 @@ body {
 .input { @apply w-full rounded-lg border border-white/10 bg-panel2 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
 .label { @apply block text-sm mb-1 text-white/70; }
 .badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]; }
+
+/* Legend & chips (visuais leves) */
+.chips { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+.chip  { border:1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05);
+    border-radius: 9999px; padding:.25rem .5rem; font-size:.75rem; }
+
+    /* Fallback seguro para quebras de linha (evita warnings de text-wrap) */
+    .footer-jogo .creditos,
+.creditos,
+.legend, .calendar-legend, .cal-legend,
+.card {
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+/* Se o CalendarMonthly antigo tiver legenda própria, esconda */
+.calendar-legend, .cal-legend, .legend { display: none !important; }
+
+/* Dia indisponível (lotado) → X vermelho no canto */
+.day-full {
+    position: relative;
+    color: #888; /* texto apagado */
+}
+.day-full::after {
+    content: "✕";
+    color: #e53935; /* vermelho vivo */
+    font-size: 0.9rem;
+    font-weight: bold;
+    position: absolute;
+    top: 4px;
+    right: 6px;
+}
+
+/* Dia disponível em dias úteis (18h30 livre) */
+.day-available {
+    border: 2px solid #00c853; /* verde institucional */
+    border-radius: 0.75rem;     /* arredondado igual card */
+    color: #fff;
+}
+
+/* Hover em dias clicáveis */
+.day-available:hover {
+    background: rgba(0, 200, 83, 0.12);
+    cursor: pointer;
+    transform: scale(1.02);
+    transition: all 0.15s ease-in-out;
+}
+
+/* ===== Modal look & feel ===== */
+.modal-overlay {
+    background: rgba(0,0,0,.100);
+    backdrop-filter: blur(50px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+}
+
+/* Painel sólido do modal — SEM transparência */
+.modal-panel {
+    border-radius: 1rem; /* arredondado */
+    background: linear-gradient(180deg, #14171d 0%, #0f1217 100%); /* sólido e elegante */
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow:
+    0 10px 30px rgba(0,0,0,.45),
+    inset 0 1px 0 rgba(255,255,255,.03);
+    color: #f5f7fa; /* texto claro */
+}
+
+
+/* header/footer mais legíveis */
+.modal-section-divider {
+    border-top: 1px solid rgba(255,255,255,.06);
+}
